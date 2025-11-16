@@ -47,21 +47,29 @@ function setupEventListeners() {
     // 添加命令按钮
     document.getElementById('addCommandBtn').addEventListener('click', addCommandInput);
 
-    // 添加命令按钮(详情页)
-    document.getElementById('addCommandInDetailBtn').addEventListener('click', addCommandInDetail);
+    // 添加命令按钮(详情页) - 暂时注释,函数未定义
+    // document.getElementById('addCommandInDetailBtn').addEventListener('click', addCommandInDetail);
 
     // 文件夹选择按钮
     document.getElementById('browseProjectPathBtn').addEventListener('click', async () => {
-        const result = await window.electronAPI.selectFolder();
-        if (!result.canceled) {
-            document.getElementById('modalProjectPath').value = result.path;
+        try {
+            const result = await window.electronAPI.selectFolder();
+            if (!result.canceled) {
+                document.getElementById('modalProjectPath').value = result.path;
+            }
+        } catch (error) {
+            console.error('Error selecting folder:', error);
         }
     });
 
     document.getElementById('browseResultPathBtn').addEventListener('click', async () => {
-        const result = await window.electronAPI.selectFolder();
-        if (!result.canceled) {
-            document.getElementById('modalResultPath').value = result.path;
+        try {
+            const result = await window.electronAPI.selectFolder();
+            if (!result.canceled) {
+                document.getElementById('modalResultPath').value = result.path;
+            }
+        } catch (error) {
+            console.error('Error selecting folder:', error);
         }
     });
 
