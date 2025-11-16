@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Claude Code 万能启动器</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="container">
+        <!-- 左侧项目列表 -->
+        <div class="sidebar">
+            <div class="sidebar-header">
+                <h2>📋 项目列表</h2>
+                <button id="addProjectBtn" class="btn-primary" title="添加项目">➕</button>
+            </div>
+            <div class="project-list" id="projectList">
+                <!-- 项目列表将动态加载 -->
+            </div>
+        </div>
+
+        <!-- 右侧项目详情 -->
+        <div class="main-content">
+            <div class="welcome" id="welcomeMessage">
+                <h1>🚀 欢迎使用 Claude Code 万能启动器</h1>
+                <p>请从左侧选择项目或添加新项目</p>
+            </div>
+
+            <div class="project-details" id="projectDetails" style="display: none;">
+                <div class="details-header">
+                    <h2 id="projectName">项目名称</h2>
+                    <div class="action-buttons">
+                        <button id="editProjectBtn" class="btn-secondary">✏️ 编辑</button>
+                        <button id="deleteProjectBtn" class="btn-danger">🗑️ 删除</button>
+                    </div>
+                </div>
+
+                <div class="details-content">
+                    <div class="info-item">
+                        <label>项目路径:</label>
+                        <div class="info-value" id="projectPath"></div>
+                    </div>
+
+                    <div class="info-item">
+                        <label>结果路径:</label>
+                        <div class="info-value">
+                            <span id="resultPath"></span>
+                            <button id="openResultBtn" class="btn-link">📂 打开文件夹</button>
+                        </div>
+                    </div>
+
+                    <div class="info-item">
+                        <label>命令列表:</label>
+                        <div id="commandsDisplay" class="commands-display">
+                            <!-- 命令输入框将动态添加 -->
+                        </div>
+                        <button id="addCommandInDetailBtn" class="btn-add-command" style="margin-top: 10px; display: none;">➕ 添加命令</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 添加/编辑项目模态框 -->
+    <div id="projectModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 id="modalTitle">添加项目</h3>
+                <button class="close-btn" id="closeModalBtn">✕</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label>项目名称:</label>
+                    <input type="text" id="modalProjectName" class="form-input" placeholder="输入项目名称">
+                </div>
+                <div class="form-group">
+                    <label>项目路径:</label>
+                    <div class="input-with-button">
+                        <input type="text" id="modalProjectPath" class="form-input" placeholder="项目文件夹路径" readonly>
+                        <button id="browseProjectPathBtn" class="btn-browse">📁 选择文件夹</button>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>命令列表:</label>
+                    <div id="commandsList" class="commands-list">
+                        <!-- 命令项将动态添加 -->
+                    </div>
+                    <button type="button" id="addCommandBtn" class="btn-add-command">➕ 添加命令</button>
+                </div>
+                <div class="form-group">
+                    <label>结果路径:</label>
+                    <div class="input-with-button">
+                        <input type="text" id="modalResultPath" class="form-input" placeholder="结果保存路径" readonly>
+                        <button id="browseResultPathBtn" class="btn-browse">📁 选择文件夹</button>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button id="cancelModalBtn" class="btn-secondary">取消</button>
+                <button id="saveProjectBtn" class="btn-primary">保存</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
