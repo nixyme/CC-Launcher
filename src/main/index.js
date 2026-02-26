@@ -39,6 +39,52 @@ function createWindow() {
   return mainWindow;
 }
 
+// === Auto Updater ===
+function setupAutoUpdater() {
+  if (isDev) return; // 开发模式不检查更新
+
+  const { autoUpdater } = require('electron-updater');
+  autoUpdater.autoDownload = false;
+  autoUpdater.autoInstallOnAppQuit = false;
+
+  autoUpdater.on('update-available', (info) => {
+    if (mainWindow) {
+      mainWindow.webContents.send('update-available', {
+        version: info.version,
+        releaseNotes: info.releaseNotes,
+      });
+    }
+  });
+
+  autoUpdater.on('update-not-available', () => {
+    if (mainWindow) {
+      mainWindow.webContents.send('update-not-available');
+    }
+  });
+
+  autoUpdater.on('download-progress', (progress) => {
+    if (mainWindow) {
+      mainWindow.webContents.send('update-download-progress', {
+        percent: Math.round(progress.percent),
+      });
+    }
+  });
+
+  autoUpdater.on('update-downloaded', () => {
+    if (mainWindow) {
+      mainWindow.webContents.send('update-downloaded');
+    }
+  });
+
+  autoUpdater.on('error', (err) => {
+    if (mainWindow) {
+      mainWindow.webContents.send('update-error', err.message);
+    }
+  });
+
+  return autoUpdater;
+}
+
 app.whenReady().then(() => {
   // macOS Dock 图标
   if (process.platform === 'darwin' && app.dock) {
@@ -54,8 +100,11 @@ app.whenReady().then(() => {
   const userDataPath = app.getPath('userData');
   store = new ProjectStore(userDataPath);
 
+  // 初始化自动更新
+  const autoUpdater = setupAutoUpdater();
+
   // 注册 IPC 处理
-  registerIpcHandlers(store);
+  registerIpcHandlers(store, autoUpdater);
 
   // 直接创建窗口，无需等待后端
   mainWindow = createWindow();

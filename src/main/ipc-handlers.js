@@ -1,4 +1,4 @@
-const { ipcMain, dialog, shell, BrowserWindow } = require('electron');
+const { ipcMain, dialog, shell, BrowserWindow, app } = require('electron');
 const { spawn } = require('child_process');
 const fs = require('fs');
 const path = require('path');
@@ -14,7 +14,7 @@ function isRegisteredProject(store, projectPath) {
   return projects.some((p) => p.path === projectPath);
 }
 
-function registerIpcHandlers(store) {
+function registerIpcHandlers(store, autoUpdater) {
   // --- 项目 CRUD ---
   ipcMain.handle('get-projects', () => {
     try {
@@ -192,6 +192,48 @@ end tell`;
 
   ipcMain.handle('set-locale', (_event, locale) => {
     store.setSetting('locale', locale);
+    return { success: true };
+  });
+
+  // --- Settings: Auto Launch ---
+  ipcMain.handle('get-auto-launch', () => {
+    return app.getLoginItemSettings().openAtLogin;
+  });
+
+  ipcMain.handle('set-auto-launch', (_event, enabled) => {
+    app.setLoginItemSettings({ openAtLogin: enabled });
+    return { success: true };
+  });
+
+  // --- App Info ---
+  ipcMain.handle('get-app-version', () => {
+    return app.getVersion();
+  });
+
+  // --- Auto Update ---
+  ipcMain.handle('check-for-update', async () => {
+    if (!autoUpdater) return { success: false, error: 'Updater not available in dev mode' };
+    try {
+      await autoUpdater.checkForUpdates();
+      return { success: true };
+    } catch (e) {
+      return { success: false, error: e.message };
+    }
+  });
+
+  ipcMain.handle('download-update', async () => {
+    if (!autoUpdater) return { success: false, error: 'Updater not available' };
+    try {
+      await autoUpdater.downloadUpdate();
+      return { success: true };
+    } catch (e) {
+      return { success: false, error: e.message };
+    }
+  });
+
+  ipcMain.handle('install-update', () => {
+    if (!autoUpdater) return { success: false, error: 'Updater not available' };
+    autoUpdater.quitAndInstall(false, true);
     return { success: true };
   });
 }

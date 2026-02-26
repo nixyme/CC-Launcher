@@ -32,6 +32,8 @@ document.addEventListener('DOMContentLoaded', async () => {
   setupEventListeners();
   setupKeyboardShortcuts();
   setupLangSwitcher();
+  setupSettings();
+  setupAutoUpdater();
 });
 
 // === Event Listeners ===
@@ -48,6 +50,7 @@ function setupEventListeners() {
   document.getElementById('cancelModalBtn').addEventListener('click', closeModal);
   document.getElementById('saveProjectBtn').addEventListener('click', saveProject);
   document.getElementById('addCommandBtn').addEventListener('click', addCommandInput);
+  document.getElementById('settingsBtn').addEventListener('click', openSettings);
 
   document.getElementById('browseProjectPathBtn').addEventListener('click', async () => {
     const result = await window.electronAPI.selectFolder();
@@ -331,7 +334,7 @@ async function saveProject() {
   const commandInputs = document.querySelectorAll('#commandsList .command-item input');
   const commands = Array.from(commandInputs).map(i => i.value.trim()).filter(c => c.length > 0);
 
-  if (!name || !projPath || !resultPath || commands.length === 0) {
+  if (!name || !projPath || commands.length === 0) {
     showToast(t('msg.fillAllFields'), 'error');
     return;
   }
@@ -465,4 +468,91 @@ function escapeHtml(text) {
   const div = document.createElement('div');
   div.textContent = text;
   return div.innerHTML;
+}
+
+// === Settings ===
+const settingsModal = document.getElementById('settingsModal');
+
+async function openSettings() {
+  // Load current values
+  const autoLaunch = await window.electronAPI.getAutoLaunch();
+  document.getElementById('autoLaunchToggle').checked = autoLaunch;
+
+  const version = await window.electronAPI.getAppVersion();
+  document.getElementById('appVersion').textContent = `v${version}`;
+
+  settingsModal.classList.add('show');
+}
+
+function closeSettings() {
+  settingsModal.classList.remove('show');
+}
+
+function setupSettings() {
+  document.getElementById('closeSettingsBtn').addEventListener('click', closeSettings);
+  settingsModal.addEventListener('click', (e) => { if (e.target === settingsModal) closeSettings(); });
+
+  document.getElementById('autoLaunchToggle').addEventListener('change', async (e) => {
+    await window.electronAPI.setAutoLaunch(e.target.checked);
+    showToast(e.target.checked ? t('settings.autoLaunchOn') : t('settings.autoLaunchOff'), 'success');
+  });
+
+  document.getElementById('checkUpdateBtn').addEventListener('click', async () => {
+    const statusEl = document.getElementById('updateStatus');
+    const btn = document.getElementById('checkUpdateBtn');
+    btn.disabled = true;
+    btn.textContent = t('settings.checking');
+    statusEl.textContent = t('settings.checking');
+    await window.electronAPI.checkForUpdate();
+    // Result comes via events
+    setTimeout(() => { btn.disabled = false; btn.textContent = t('settings.checkUpdate'); }, 5000);
+  });
+}
+
+// === Auto Updater Events ===
+function setupAutoUpdater() {
+  if (!window.electronAPI.onUpdateAvailable) return;
+
+  window.electronAPI.onUpdateAvailable((info) => {
+    const statusEl = document.getElementById('updateStatus');
+    const btn = document.getElementById('checkUpdateBtn');
+    statusEl.textContent = t('settings.newVersion', { version: info.version });
+    btn.textContent = t('settings.download');
+    btn.disabled = false;
+    btn.onclick = async () => {
+      btn.disabled = true;
+      btn.textContent = t('settings.downloading');
+      await window.electronAPI.downloadUpdate();
+    };
+  });
+
+  window.electronAPI.onUpdateNotAvailable(() => {
+    document.getElementById('updateStatus').textContent = t('settings.upToDate');
+    const btn = document.getElementById('checkUpdateBtn');
+    btn.textContent = t('settings.checkUpdate');
+    btn.disabled = false;
+  });
+
+  window.electronAPI.onUpdateDownloadProgress((progress) => {
+    document.getElementById('updateStatus').textContent = t('settings.downloadProgress', { percent: progress.percent });
+  });
+
+  window.electronAPI.onUpdateDownloaded(() => {
+    const statusEl = document.getElementById('updateStatus');
+    const btn = document.getElementById('checkUpdateBtn');
+    statusEl.textContent = t('settings.readyToInstall');
+    btn.textContent = t('settings.installRestart');
+    btn.disabled = false;
+    btn.onclick = () => {
+      window.electronAPI.installUpdate();
+    };
+  });
+
+  window.electronAPI.onUpdateError((msg) => {
+    document.getElementById('updateStatus').textContent = t('settings.updateError');
+    const btn = document.getElementById('checkUpdateBtn');
+    btn.textContent = t('settings.checkUpdate');
+    btn.disabled = false;
+    console.error('Update error:', msg);
+  });
 }

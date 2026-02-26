@@ -29,4 +29,19 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // 语言设置
   getLocale: () => ipcRenderer.invoke('get-locale'),
   setLocale: (locale) => ipcRenderer.invoke('set-locale', locale),
+
+  // 设置
+  getAutoLaunch: () => ipcRenderer.invoke('get-auto-launch'),
+  setAutoLaunch: (enabled) => ipcRenderer.invoke('set-auto-launch', enabled),
+  getAppVersion: () => ipcRenderer.invoke('get-app-version'),
+
+  // 自动更新
+  checkForUpdate: () => ipcRenderer.invoke('check-for-update'),
+  downloadUpdate: () => ipcRenderer.invoke('download-update'),
+  installUpdate: () => ipcRenderer.invoke('install-update'),
+  onUpdateAvailable: (cb) => ipcRenderer.on('update-available', (_e, info) => cb(info)),
+  onUpdateNotAvailable: (cb) => ipcRenderer.on('update-not-available', () => cb()),
+  onUpdateDownloadProgress: (cb) => ipcRenderer.on('update-download-progress', (_e, p) => cb(p)),
+  onUpdateDownloaded: (cb) => ipcRenderer.on('update-downloaded', () => cb()),
+  onUpdateError: (cb) => ipcRenderer.on('update-error', (_e, msg) => cb(msg)),
 });

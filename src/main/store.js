@@ -75,6 +75,8 @@ class ProjectStore {
     if (!fs.existsSync(projPath)) {
       throw new Error(`Project path does not exist: ${projPath}`);
     }
+    // 新项目置顶：所有现有项目 order+1，新项目 order=0
+    projects.forEach((p) => { p.order = (p.order || 0) + 1; });
     const project = {
       id: uuidv4(),
       name,
@@ -82,9 +84,9 @@ class ProjectStore {
       commands: commands || [],
       default_command: commands?.[0] || '',
       result_path: result_path || '',
-      order: projects.length,
+      order: 0,
     };
-    projects.push(project);
+    projects.unshift(project);
     this._saveProjects(projects);
     return project;
   }
@@ -157,7 +159,7 @@ class ProjectStore {
     let imported = 0;
     let skipped = 0;
     for (const p of data.projects) {
-      if (!p.name || !p.path || !p.result_path) { skipped++; continue; }
+      if (!p.name || !p.path) { skipped++; continue; }
       try {
         this.addProject({
           name: p.name,
