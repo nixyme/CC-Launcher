@@ -21,6 +21,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // 文件夹操作
   openFolder: (folderPath) => ipcRenderer.invoke('open-folder', folderPath),
   selectFolder: () => ipcRenderer.invoke('select-folder'),
+  selectFile: (defaultPath) => ipcRenderer.invoke('select-file', defaultPath),
 
   // 文件对话框
   saveFile: (data, defaultName) => ipcRenderer.invoke('save-file', { data, defaultName }),
@@ -29,6 +30,14 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // 语言设置
   getLocale: () => ipcRenderer.invoke('get-locale'),
   setLocale: (locale) => ipcRenderer.invoke('set-locale', locale),
+
+  // 终端设置
+  getTerminal: () => ipcRenderer.invoke('get-terminal'),
+  setTerminal: (terminal) => ipcRenderer.invoke('set-terminal', terminal),
+
+  // 全局快捷键
+  getGlobalShortcut: () => ipcRenderer.invoke('get-global-shortcut'),
+  setGlobalShortcut: (accelerator) => ipcRenderer.invoke('set-global-shortcut', accelerator),
 
   // 设置
   getAutoLaunch: () => ipcRenderer.invoke('get-auto-launch'),

@@ -1,11 +1,11 @@
-const { ipcMain, dialog, shell, BrowserWindow, app } = require('electron');
+const { ipcMain, dialog, shell, BrowserWindow, app, globalShortcut } = require('electron');
 const { spawn } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 
 // Shell 特殊字符转义（防注入）
 function escapeShellArg(str) {
-  return str.replace(/(["\s'$`\\!#&|;(){}])/g, '\\$1');
+  return str.replace(/(["\\s'$`\\\\!#&|;(){}])/g, '\\$1');
 }
 
 // 校验路径是否为已注册项目
@@ -14,7 +14,40 @@ function isRegisteredProject(store, projectPath) {
   return projects.some((p) => p.path === projectPath);
 }
 
-function registerIpcHandlers(store, autoUpdater) {
+// 智能处理命令路径：自动补 ./ 并给含空格的路径加单引号
+// 返回 shell 安全的命令字符串
+function normalizeCommandPath(command, projectPath) {
+  // 已经被引号包裹的，不处理
+  if (command.startsWith('"') || command.startsWith("'")) return command;
+
+  // 尝试整条命令或逐词缩短，找到存在的文件路径
+  const words = command.split(/\s+/);
+  for (let i = words.length; i >= 1; i--) {
+    const candidate = words.slice(0, i).join(' ');
+    const rest = i < words.length ? ' ' + words.slice(i).join(' ') : '';
+
+    // 相对路径：拼接项目目录检查
+    if (!candidate.startsWith('/') && !candidate.startsWith('./') && !candidate.startsWith('~')) {
+      const fullPath = path.join(projectPath, candidate);
+      if (fs.existsSync(fullPath)) {
+        const safePath = './' + candidate.replace(/'/g, "'\\''");
+        return "'" + safePath + "'" + rest;
+      }
+    } else {
+      // 绝对路径或 ./ 开头
+      if (fs.existsSync(candidate)) {
+        if (candidate.includes(' ')) {
+          const safePath = candidate.replace(/'/g, "'\\''");
+          return "'" + safePath + "'" + rest;
+        }
+        return command;
+      }
+    }
+  }
+  return command;
+}
+
+function registerIpcHandlers(store, autoUpdater, getMainWindow) {
   // --- 项目 CRUD ---
   ipcMain.handle('get-projects', () => {
     try {
@@ -87,7 +120,7 @@ function registerIpcHandlers(store, autoUpdater) {
     }
   });
 
-  // --- 命令执行 ---
+  // --- 命令执行（支持终端选择） ---
   ipcMain.handle('execute-command', (_event, { projectPath, command }) => {
     return new Promise((resolve) => {
       if (!isRegisteredProject(store, projectPath)) {
@@ -100,23 +133,37 @@ function registerIpcHandlers(store, autoUpdater) {
       }
 
       const platform = process.platform;
+      const terminal = store.getSetting('terminal') || 'default';
       let proc;
 
+      // 智能处理命令中的文件路径：自动补 ./ 和引号
+      // 逐步尝试更长的前缀，找到真实存在的文件路径
+      command = normalizeCommandPath(command, projectPath);
+
       if (platform === 'darwin') {
-        const escapedPath = projectPath.replace(/"/g, '\\"');
-        const escapedCmd = command.replace(/"/g, '\\"');
-        const script = `tell application "Terminal"
+        if (terminal === 'kaku') {
+          if (!fs.existsSync('/Applications/Kaku.app')) {
+            resolve({ success: false, error: 'Kaku.app not found in /Applications' });
+            return;
+          }
+          proc = spawn('open', ['-n', '-a', 'Kaku', '--args', 'start', '--always-new-process', '--cwd', projectPath, '--', 'bash', '-c', "cd '" + projectPath + "' && " + command + "; exec bash"], { detached: true });
+          proc.unref();
+        } else {
+          // Default: Terminal.app via AppleScript（单引号包裹路径避免转义问题）
+          const safePath = projectPath.replace(/'/g, "'\\'");
+          const script = `tell application "Terminal"
   activate
-  do script "cd \\"${escapedPath}\\" && ${escapedCmd}"
+  do script "cd '${safePath}' && ${command}"
 end tell`;
-        proc = spawn('osascript', ['-e', script]);
+          proc = spawn('osascript', ['-e', script]);
+        }
       } else if (platform === 'linux') {
         const terminals = ['gnome-terminal', 'xterm', 'xfce4-terminal', 'konsole'];
         const termArgs = {
-          'gnome-terminal': ['--', 'bash', '-c', `cd '${projectPath}' && ${command}; exec bash`],
-          'xterm': ['-e', `bash -c "cd '${projectPath}' && ${command}; exec bash"`],
-          'xfce4-terminal': ['-e', `bash -c "cd '${projectPath}' && ${command}; exec bash"`],
-          'konsole': ['-e', 'bash', '-c', `cd '${projectPath}' && ${command}; exec bash`],
+          'gnome-terminal': ['--', 'bash', '-c', "cd '" + projectPath + "' && " + command + '; exec bash'],
+          'xterm': ['-e', 'bash -c "cd \'' + projectPath + '\' && ' + command + '; exec bash"'],
+          'xfce4-terminal': ['-e', 'bash -c "cd \'' + projectPath + '\' && ' + command + '; exec bash"'],
+          'konsole': ['-e', 'bash', '-c', "cd '" + projectPath + "' && " + command + '; exec bash'],
         };
         let launched = false;
         for (const term of terminals) {
@@ -131,9 +178,9 @@ end tell`;
           return;
         }
       } else if (platform === 'win32') {
-        proc = spawn('cmd.exe', ['/c', 'start', 'cmd.exe', '/k', `cd /d "${projectPath}" && ${command}`], { shell: true });
+        proc = spawn('cmd.exe', ['/c', 'start', 'cmd.exe', '/k', 'cd /d "' + projectPath + '" && ' + command], { shell: true });
       } else {
-        resolve({ success: false, error: `Unsupported platform: ${platform}` });
+        resolve({ success: false, error: 'Unsupported platform: ' + platform });
         return;
       }
 
@@ -149,6 +196,18 @@ end tell`;
     }
     await shell.openPath(folderPath);
     return { success: true };
+  });
+
+  ipcMain.handle('select-file', async (_event, defaultPath) => {
+    const win = BrowserWindow.getFocusedWindow();
+    const opts = {
+      properties: ['openFile'],
+      title: 'Select Executable',
+    };
+    if (defaultPath && fs.existsSync(defaultPath)) opts.defaultPath = defaultPath;
+    const result = await dialog.showOpenDialog(win, opts);
+    if (result.canceled) return { canceled: true };
+    return { canceled: false, path: result.filePaths[0] };
   });
 
   ipcMain.handle('select-folder', async () => {
@@ -193,6 +252,60 @@ end tell`;
   ipcMain.handle('set-locale', (_event, locale) => {
     store.setSetting('locale', locale);
     return { success: true };
+  });
+
+  // --- Terminal Setting ---
+  ipcMain.handle('get-terminal', () => {
+    return store.getSetting('terminal') || 'default';
+  });
+
+  ipcMain.handle('set-terminal', (_event, terminal) => {
+    store.setSetting('terminal', terminal);
+    return { success: true };
+  });
+
+  // --- Global Shortcut ---
+  ipcMain.handle('get-global-shortcut', () => {
+    return store.getSetting('globalShortcut') || '';
+  });
+
+  ipcMain.handle('set-global-shortcut', (_event, accelerator) => {
+    // Unregister old
+    const old = store.getSetting('globalShortcut');
+    if (old) {
+      try { globalShortcut.unregister(old); } catch { /* ignore */ }
+    }
+
+    if (!accelerator) {
+      store.setSetting('globalShortcut', '');
+      return { success: true };
+    }
+
+    // Check conflict
+    if (globalShortcut.isRegistered(accelerator)) {
+      return { success: false, error: 'conflict' };
+    }
+
+    try {
+      const ok = globalShortcut.register(accelerator, () => {
+        const win = getMainWindow();
+        if (!win) return;
+        if (process.platform === 'darwin') {
+          app.show();
+          app.focus({ steal: true });
+        }
+        if (win.isMinimized()) win.restore();
+        if (!win.isVisible()) win.show();
+        win.focus();
+      });
+      if (!ok) {
+        return { success: false, error: 'register_failed' };
+      }
+      store.setSetting('globalShortcut', accelerator);
+      return { success: true };
+    } catch (e) {
+      return { success: false, error: e.message };
+    }
   });
 
   // --- Settings: Auto Launch ---

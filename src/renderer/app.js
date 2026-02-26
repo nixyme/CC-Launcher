@@ -27,11 +27,9 @@ const icons = {
 // === Init ===
 document.addEventListener('DOMContentLoaded', async () => {
   await initLocale();
-  updateLangDropdownActive();
   loadProjects();
   setupEventListeners();
   setupKeyboardShortcuts();
-  setupLangSwitcher();
   setupSettings();
   setupAutoUpdater();
 });
@@ -39,14 +37,37 @@ document.addEventListener('DOMContentLoaded', async () => {
 // === Event Listeners ===
 function setupEventListeners() {
   document.getElementById('addProjectBtn').addEventListener('click', () => openModal(false));
-  document.getElementById('exportBtn').addEventListener('click', exportSettings);
-  document.getElementById('importBtn').addEventListener('click', importSettings);
+
+  // Drag directory onto add button → new project with that path
+  const addBtn = document.getElementById('addProjectBtn');
+  addBtn.addEventListener('dragover', (e) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'copy';
+    addBtn.classList.add('drag-active');
+  });
+  addBtn.addEventListener('dragleave', () => addBtn.classList.remove('drag-active'));
+  addBtn.addEventListener('drop', (e) => {
+    e.preventDefault();
+    addBtn.classList.remove('drag-active');
+    const files = e.dataTransfer.files;
+    if (files.length > 0) {
+      const filePath = files[0].path;
+      if (filePath) {
+        openModal(false);
+        setTimeout(() => {
+          document.getElementById('modalProjectPath').value = filePath;
+          const dirName = filePath.split('/').pop() || filePath;
+          document.getElementById('modalProjectName').value = dirName;
+        }, 50);
+      }
+    }
+  });
+  // Import/Export now in settings modal — no sidebar buttons
   document.getElementById('editProjectBtn').addEventListener('click', () => {
     if (currentProject) openModal(true, currentProject);
   });
   document.getElementById('deleteProjectBtn').addEventListener('click', deleteProject);
-  document.getElementById('openResultBtn').addEventListener('click', openResultFolder);
-  document.getElementById('closeModalBtn').addEventListener('click', closeModal);
+  document.getElementById('openOutputBtn').addEventListener('click', openOutputFolder);
   document.getElementById('cancelModalBtn').addEventListener('click', closeModal);
   document.getElementById('saveProjectBtn').addEventListener('click', saveProject);
   document.getElementById('addCommandBtn').addEventListener('click', addCommandInput);
@@ -56,12 +77,11 @@ function setupEventListeners() {
     const result = await window.electronAPI.selectFolder();
     if (!result.canceled) document.getElementById('modalProjectPath').value = result.path;
   });
-  document.getElementById('browseResultPathBtn').addEventListener('click', async () => {
+  document.getElementById('browseOutputPathBtn').addEventListener('click', async () => {
     const result = await window.electronAPI.selectFolder();
-    if (!result.canceled) document.getElementById('modalResultPath').value = result.path;
+    if (!result.canceled) document.getElementById('modalOutputPath').value = result.path;
   });
 
-  projectModal.addEventListener('click', (e) => { if (e.target === projectModal) closeModal(); });
 
   // Search
   searchInput.addEventListener('input', (e) => {
@@ -79,45 +99,14 @@ function setupKeyboardShortcuts() {
     }
     // Escape: Close modal
     if (e.key === 'Escape') {
-      if (projectModal.classList.contains('show')) closeModal();
+      if (settingsModal.classList.contains('show')) closeSettings();
+      else if (projectModal.classList.contains('show')) closeModal();
     }
     // Cmd/Ctrl + F: Focus search
     if ((e.metaKey || e.ctrlKey) && e.key === 'f') {
       e.preventDefault();
       searchInput.focus();
     }
-  });
-}
-
-// === Language Switcher ===
-function setupLangSwitcher() {
-  const langBtn = document.getElementById('langBtn');
-  const langDropdown = document.getElementById('langDropdown');
-
-  langBtn.addEventListener('click', (e) => {
-    e.stopPropagation();
-    langDropdown.classList.toggle('show');
-  });
-
-  document.addEventListener('click', () => langDropdown.classList.remove('show'));
-
-  langDropdown.querySelectorAll('.lang-option').forEach((btn) => {
-    btn.addEventListener('click', async (e) => {
-      e.stopPropagation();
-      const locale = btn.dataset.locale;
-      await setLocale(locale);
-      updateLangDropdownActive();
-      langDropdown.classList.remove('show');
-      // Re-render dynamic content
-      renderProjectList();
-      if (currentProject) showProjectDetails();
-    });
-  });
-}
-
-function updateLangDropdownActive() {
-  document.querySelectorAll('.lang-option').forEach((btn) => {
-    btn.classList.toggle('active', btn.dataset.locale === currentLocale);
   });
 }
 
@@ -226,7 +215,10 @@ function showProjectDetails() {
   projectDetails.style.display = 'block';
   document.getElementById('projectName').textContent = currentProject.name;
   document.getElementById('projectPath').textContent = currentProject.path;
-  document.getElementById('resultPath').textContent = currentProject.result_path;
+  document.getElementById('outputPath').textContent = currentProject.result_path;
+  // Hide output path section if empty
+  const outputSection = document.getElementById('outputPathSection');
+  if (outputSection) outputSection.style.display = currentProject.result_path ? '' : 'none';
   renderCommandsDisplay();
 }
 
@@ -234,20 +226,27 @@ function renderCommandsDisplay() {
   const display = document.getElementById('commandsDisplay');
   display.innerHTML = '';
   const commands = currentProject.commands || [];
+  const names = currentProject.command_names || [];
+  let firstVarInput = null;
+  let firstVarPos = -1;
+
   commands.forEach((command, index) => {
     if (!command && commands.length > 1) return;
     const wrapper = document.createElement('div');
     wrapper.className = 'command-button-wrapper';
+    wrapper.draggable = true;
+    wrapper.dataset.cmdIndex = index;
+
+    // Drag handle
+    const handle = document.createElement('span');
+    handle.className = 'cmd-drag-handle';
+    handle.innerHTML = '<svg viewBox="0 0 24 24" fill="currentColor" width="14" height="14"><circle cx="9" cy="6" r="1.5"/><circle cx="15" cy="6" r="1.5"/><circle cx="9" cy="12" r="1.5"/><circle cx="15" cy="12" r="1.5"/><circle cx="9" cy="18" r="1.5"/><circle cx="15" cy="18" r="1.5"/></svg>';
 
     const input = document.createElement('input');
     input.type = 'text';
     input.className = 'command-input-editable';
     input.value = command || '';
     input.placeholder = 'claude --dangerously-skip-permissions ...';
-    input.addEventListener('blur', async () => {
-      await window.electronAPI.updateCommand(currentProject.id, index, input.value);
-      if (currentProject.commands) currentProject.commands[index] = input.value;
-    });
     // Enter to execute
     input.addEventListener('keydown', (e) => {
       if (e.key === 'Enter') {
@@ -255,6 +254,20 @@ function renderCommandsDisplay() {
         if (cmd) executeCommand(cmd);
       }
     });
+
+    // Track first {} variable position
+    const varMatch = (command || '').indexOf('{}');
+    if (varMatch !== -1 && !firstVarInput) {
+      firstVarInput = input;
+      firstVarPos = varMatch;
+    }
+
+    // Command name input
+    const nameInput = document.createElement('input');
+    nameInput.type = 'text';
+    nameInput.className = 'command-name-input';
+    nameInput.value = names[index] || '';
+    nameInput.placeholder = t('details.cmdName') || 'Name';
 
     const execBtn = document.createElement('button');
     execBtn.className = 'btn-execute-command';
@@ -265,10 +278,62 @@ function renderCommandsDisplay() {
       else showToast(t('msg.emptyCommand'), 'error');
     });
 
+    wrapper.appendChild(handle);
     wrapper.appendChild(input);
+    wrapper.appendChild(nameInput);
     wrapper.appendChild(execBtn);
     display.appendChild(wrapper);
+    setupCommandInputDragDrop(input);
+
+    // Command row drag & drop reorder
+    wrapper.addEventListener('dragstart', (e) => {
+      if (e.target !== wrapper) { e.preventDefault(); return; }
+      wrapper.classList.add('dragging');
+      e.dataTransfer.effectAllowed = 'move';
+      e.dataTransfer.setData('text/plain', index.toString());
+    });
+    wrapper.addEventListener('dragend', () => {
+      wrapper.classList.remove('dragging');
+      display.querySelectorAll('.command-button-wrapper').forEach(w => w.classList.remove('cmd-drag-over'));
+    });
+    wrapper.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+      const dragging = display.querySelector('.dragging');
+      if (dragging && dragging !== wrapper) wrapper.classList.add('cmd-drag-over');
+    });
+    wrapper.addEventListener('dragleave', () => wrapper.classList.remove('cmd-drag-over'));
+    wrapper.addEventListener('drop', (e) => {
+      e.preventDefault();
+      wrapper.classList.remove('cmd-drag-over');
+      const fromIdx = parseInt(e.dataTransfer.getData('text/plain'));
+      const toIdx = parseInt(wrapper.dataset.cmdIndex);
+      if (isNaN(fromIdx) || isNaN(toIdx) || fromIdx === toIdx) return;
+      const cmds = [...currentProject.commands];
+      const [moved] = cmds.splice(fromIdx, 1);
+      cmds.splice(toIdx, 0, moved);
+      const nms = [...(currentProject.command_names || [])];
+      const [movedName] = nms.splice(fromIdx, 1);
+      nms.splice(toIdx, 0, movedName || '');
+      currentProject.commands = cmds;
+      currentProject.command_names = nms;
+      window.electronAPI.updateProject(currentProject.id, { commands: cmds, command_names: nms });
+      renderCommandsDisplay();
+    });
+
+    // Only handle drag on the handle, not the inputs
+    handle.addEventListener('mousedown', () => { wrapper.draggable = true; });
+    input.addEventListener('mousedown', () => { wrapper.draggable = false; });
+    nameInput.addEventListener('mousedown', () => { wrapper.draggable = false; });
   });
+
+  // Focus first {} variable
+  if (firstVarInput) {
+    setTimeout(() => {
+      firstVarInput.focus();
+      firstVarInput.setSelectionRange(firstVarPos, firstVarPos + 2);
+    }, 100);
+  }
 }
 
 // === Modal ===
@@ -278,27 +343,27 @@ function openModal(editMode = false, project = null) {
   if (editMode && project) {
     document.getElementById('modalProjectName').value = project.name;
     document.getElementById('modalProjectPath').value = project.path;
-    document.getElementById('modalResultPath').value = project.result_path;
-    renderCommandInputs(project.commands || []);
+    document.getElementById('modalOutputPath').value = project.result_path;
+    renderCommandInputs(project.commands || [], project.command_names || []);
   } else {
     document.getElementById('modalProjectName').value = '';
     document.getElementById('modalProjectPath').value = '';
-    document.getElementById('modalResultPath').value = '';
-    renderCommandInputs(['claude --dangerously-skip-permissions ']);
+    document.getElementById('modalOutputPath').value = '';
+    renderCommandInputs(['claude --dangerously-skip-permissions '], ['']);
   }
   projectModal.classList.add('show');
   // Focus first input after animation
   setTimeout(() => document.getElementById('modalProjectName').focus(), 220);
 }
 
-function renderCommandInputs(commands = []) {
+function renderCommandInputs(commands = [], names = []) {
   const list = document.getElementById('commandsList');
   list.innerHTML = '';
-  if (commands.length === 0) commands = [''];
-  commands.forEach(cmd => addCommandInputWithValue(cmd));
+  if (commands.length === 0) { commands = ['']; names = ['']; }
+  commands.forEach((cmd, i) => addCommandInputWithValue(cmd, names[i] || ''));
 }
 
-function addCommandInputWithValue(value = '') {
+function addCommandInputWithValue(value = '', name = '') {
   const list = document.getElementById('commandsList');
   const item = document.createElement('div');
   item.className = 'command-item';
@@ -307,6 +372,28 @@ function addCommandInputWithValue(value = '') {
   input.className = 'form-input';
   input.placeholder = 'claude --dangerously-skip-permissions ...';
   input.value = value;
+  const nameInput = document.createElement('input');
+  nameInput.type = 'text';
+  nameInput.className = 'form-input command-name-field';
+  nameInput.placeholder = t('modal.cmdName') || 'Name';
+  nameInput.value = name;
+  const browseBtn = document.createElement('button');
+  browseBtn.type = 'button';
+  browseBtn.className = 'btn-browse-cmd';
+  browseBtn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="14" height="14"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>';
+  browseBtn.title = t('modal.browseFile') || 'Browse file';
+  browseBtn.addEventListener('click', async () => {
+    const projectPath = document.getElementById('modalProjectPath').value.trim();
+    const result = await window.electronAPI.selectFile(projectPath || undefined);
+    if (!result.canceled && result.path) {
+      let filePath = result.path;
+      if (projectPath && filePath.startsWith(projectPath + '/')) {
+        filePath = './' + filePath.slice(projectPath.length + 1);
+      }
+      input.value = filePath;
+      input.focus();
+    }
+  });
   const removeBtn = document.createElement('button');
   removeBtn.type = 'button';
   removeBtn.className = 'btn-remove-command';
@@ -316,12 +403,14 @@ function addCommandInputWithValue(value = '') {
     else showToast(t('msg.minOneCommand'), 'error');
   });
   item.appendChild(input);
+  item.appendChild(nameInput);
+  item.appendChild(browseBtn);
   item.appendChild(removeBtn);
   list.appendChild(item);
 }
 
 function addCommandInput() {
-  addCommandInputWithValue('claude --dangerously-skip-permissions ');
+  addCommandInputWithValue('claude --dangerously-skip-permissions ', '');
 }
 
 function closeModal() { projectModal.classList.remove('show'); }
@@ -330,9 +419,19 @@ function closeModal() { projectModal.classList.remove('show'); }
 async function saveProject() {
   const name = document.getElementById('modalProjectName').value.trim();
   const projPath = document.getElementById('modalProjectPath').value.trim();
-  const resultPath = document.getElementById('modalResultPath').value.trim();
-  const commandInputs = document.querySelectorAll('#commandsList .command-item input');
-  const commands = Array.from(commandInputs).map(i => i.value.trim()).filter(c => c.length > 0);
+  const outputPath = document.getElementById('modalOutputPath').value.trim();
+  const commandItems = document.querySelectorAll('#commandsList .command-item');
+  const commands = [];
+  const commandNames = [];
+  commandItems.forEach(item => {
+    const inputs = item.querySelectorAll('input');
+    const cmd = inputs[0].value.trim();
+    const cmdName = inputs[1] ? inputs[1].value.trim() : '';
+    if (cmd.length > 0) {
+      commands.push(cmd);
+      commandNames.push(cmdName);
+    }
+  });
 
   if (!name || !projPath || commands.length === 0) {
     showToast(t('msg.fillAllFields'), 'error');
@@ -342,11 +441,11 @@ async function saveProject() {
   let result;
   if (isEditMode && currentProject) {
     result = await window.electronAPI.updateProject(currentProject.id, {
-      name, path: projPath, commands, result_path: resultPath,
+      name, path: projPath, commands, command_names: commandNames, result_path: outputPath,
     });
   } else {
     result = await window.electronAPI.addProject({
-      name, path: projPath, commands, result_path: resultPath,
+      name, path: projPath, commands, command_names: commandNames, result_path: outputPath,
     });
   }
 
@@ -393,7 +492,7 @@ async function executeCommand(command) {
   }
 }
 
-async function openResultFolder() {
+async function openOutputFolder() {
   if (!currentProject?.result_path) return;
   await window.electronAPI.openFolder(currentProject.result_path);
 }
@@ -478,6 +577,17 @@ async function openSettings() {
   const autoLaunch = await window.electronAPI.getAutoLaunch();
   document.getElementById('autoLaunchToggle').checked = autoLaunch;
 
+  // Set current language
+  document.getElementById('langSelect').value = currentLocale;
+
+  // Terminal
+  const terminal = await window.electronAPI.getTerminal();
+  document.getElementById('terminalSelect').value = terminal;
+
+  // Global shortcut
+  const shortcut = await window.electronAPI.getGlobalShortcut();
+  document.getElementById('shortcutInput').value = shortcut || '';
+
   const version = await window.electronAPI.getAppVersion();
   document.getElementById('appVersion').textContent = `v${version}`;
 
@@ -491,6 +601,124 @@ function closeSettings() {
 function setupSettings() {
   document.getElementById('closeSettingsBtn').addEventListener('click', closeSettings);
   settingsModal.addEventListener('click', (e) => { if (e.target === settingsModal) closeSettings(); });
+
+  // Language select
+  document.getElementById('langSelect').addEventListener('change', async (e) => {
+    await setLocale(e.target.value);
+    renderProjectList();
+    if (currentProject) showProjectDetails();
+  });
+
+  // Terminal select
+  document.getElementById('terminalSelect').addEventListener('change', async (e) => {
+    await window.electronAPI.setTerminal(e.target.value);
+    showToast(t('settings.terminalSet'), 'success');
+  });
+
+  // Global shortcut recording
+  const shortcutInput = document.getElementById('shortcutInput');
+  let recordingShortcut = false;
+
+  shortcutInput.addEventListener('click', () => {
+    recordingShortcut = true;
+    shortcutInput.value = t('settings.pressKeys') || 'Press keys...';
+    shortcutInput.classList.add('recording');
+  });
+
+  shortcutInput.addEventListener('blur', () => {
+    if (recordingShortcut) {
+      recordingShortcut = false;
+      shortcutInput.classList.remove('recording');
+      window.electronAPI.getGlobalShortcut().then(s => {
+        shortcutInput.value = s || '';
+      });
+    }
+  });
+
+  // Show held modifiers in real-time
+  shortcutInput.addEventListener('keydown', async (e) => {
+    if (!recordingShortcut) return;
+    e.preventDefault();
+    e.stopPropagation();
+
+    const modifiers = [];
+    if (e.metaKey || e.ctrlKey) modifiers.push('⌘');
+    if (e.altKey) modifiers.push('⌥');
+    if (e.shiftKey) modifiers.push('⇧');
+
+    // If only modifiers held, show them as hint
+    if (['Meta', 'Control', 'Alt', 'Shift'].includes(e.key)) {
+      shortcutInput.value = modifiers.length ? modifiers.join('') + ' + ?' : (t('settings.pressKeys') || 'Press keys...');
+      return;
+    }
+
+    // Build accelerator from e.code (immune to Option key character remapping)
+    const parts = [];
+    if (e.metaKey || e.ctrlKey) parts.push('CommandOrControl');
+    if (e.altKey) parts.push('Alt');
+    if (e.shiftKey) parts.push('Shift');
+
+    if (parts.length === 0) return; // Must have at least one modifier
+
+    let key = '';
+    const code = e.code;
+    if (code.startsWith('Key')) key = code.slice(3); // KeyA → A
+    else if (code.startsWith('Digit')) key = code.slice(5); // Digit1 → 1
+    else if (code === 'Space') key = 'Space';
+    else if (code === 'Backspace') key = 'Backspace';
+    else if (code === 'Delete') key = 'Delete';
+    else if (code === 'Enter') key = 'Return';
+    else if (code === 'Tab') key = 'Tab';
+    else if (code === 'Escape') key = 'Escape';
+    else if (code === 'ArrowUp') key = 'Up';
+    else if (code === 'ArrowDown') key = 'Down';
+    else if (code === 'ArrowLeft') key = 'Left';
+    else if (code === 'ArrowRight') key = 'Right';
+    else if (code.startsWith('F') && !isNaN(code.slice(1))) key = code; // F1-F12
+    else if (code === 'Minus') key = '-';
+    else if (code === 'Equal') key = '=';
+    else if (code === 'BracketLeft') key = '[';
+    else if (code === 'BracketRight') key = ']';
+    else if (code === 'Backslash') key = '\\';
+    else if (code === 'Semicolon') key = ';';
+    else if (code === 'Quote') key = "'";
+    else if (code === 'Comma') key = ',';
+    else if (code === 'Period') key = '.';
+    else if (code === 'Slash') key = '/';
+    else if (code === 'Backquote') key = '`';
+    else key = e.key.length === 1 ? e.key.toUpperCase() : e.key;
+
+    if (!key) return;
+    parts.push(key);
+
+    const accelerator = parts.join('+');
+    recordingShortcut = false;
+    shortcutInput.classList.remove('recording');
+
+    const result = await window.electronAPI.setGlobalShortcut(accelerator);
+    if (result.success) {
+      shortcutInput.value = accelerator;
+      showToast(t('settings.shortcutSet'), 'success');
+    } else if (result.error === 'conflict') {
+      showToast(t('settings.shortcutConflict'), 'error');
+      const s = await window.electronAPI.getGlobalShortcut();
+      shortcutInput.value = s || '';
+    } else {
+      showToast(t('settings.shortcutFailed') + ': ' + result.error, 'error');
+      const s = await window.electronAPI.getGlobalShortcut();
+      shortcutInput.value = s || '';
+    }
+  });
+
+  document.getElementById('clearShortcutBtn').addEventListener('click', async () => {
+    await window.electronAPI.setGlobalShortcut('');
+    document.getElementById('shortcutInput').value = '';
+    showToast(t('settings.shortcutCleared'), 'success');
+  });
+
+  // Import / Export (now in settings)
+  document.getElementById('exportBtn').addEventListener('click', exportSettings);
+  document.getElementById('importBtn').addEventListener('click', importSettings);
 
   document.getElementById('autoLaunchToggle').addEventListener('change', async (e) => {
     await window.electronAPI.setAutoLaunch(e.target.checked);
@@ -554,5 +782,52 @@ function setupAutoUpdater() {
     btn.textContent = t('settings.checkUpdate');
     btn.disabled = false;
     console.error('Update error:', msg);
+  });
+}
+
+// === Command Input: Paste Image & Drag File Support ===
+function setupCommandInputDragDrop(input) {
+  // Drag file into command input → append file path
+  input.addEventListener('dragover', (e) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'copy';
+    input.classList.add('drag-highlight');
+  });
+  input.addEventListener('dragleave', () => {
+    input.classList.remove('drag-highlight');
+  });
+  input.addEventListener('drop', (e) => {
+    e.preventDefault();
+    input.classList.remove('drag-highlight');
+    const files = e.dataTransfer.files;
+    if (files.length > 0) {
+      const paths = Array.from(files).map(f => f.path).filter(Boolean);
+      if (paths.length > 0) {
+        const cur = input.value.trim();
+        input.value = cur ? cur + ' ' + paths.join(' ') : paths.join(' ');
+        input.dispatchEvent(new Event('input'));
+      }
+    }
+  });
+
+  // Paste image → insert as base64 data URI or file path
+  input.addEventListener('paste', (e) => {
+    const items = e.clipboardData?.items;
+    if (!items) return;
+    for (const item of items) {
+      if (item.kind === 'file' && item.type.startsWith('image/')) {
+        e.preventDefault();
+        const file = item.getAsFile();
+        const reader = new FileReader();
+        reader.onload = () => {
+          const cur = input.value.trim();
+          input.value = cur ? cur + ' ' + reader.result : reader.result;
+          input.dispatchEvent(new Event('input'));
+          showToast(t('msg.imagePasted'), 'success');
+        };
+        reader.readAsDataURL(file);
+        return;
+      }
+    }
   });
 }

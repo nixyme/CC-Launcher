@@ -67,7 +67,7 @@ class ProjectStore {
     return this._loadProjects().find((p) => p.id === id) || null;
   }
 
-  addProject({ name, path: projPath, commands, result_path }) {
+  addProject({ name, path: projPath, commands, command_names, result_path }) {
     const projects = this._loadProjects();
     if (projects.some((p) => p.name === name)) {
       throw new Error(`Project name '${name}' already exists`);
@@ -82,6 +82,7 @@ class ProjectStore {
       name,
       path: projPath,
       commands: commands || [],
+      command_names: command_names || [],
       default_command: commands?.[0] || '',
       result_path: result_path || '',
       order: 0,
@@ -112,6 +113,9 @@ class ProjectStore {
     if (updates.commands !== undefined) {
       project.commands = updates.commands;
       project.default_command = updates.commands[0] || '';
+    }
+    if (updates.command_names !== undefined) {
+      project.command_names = updates.command_names;
     }
     if (updates.result_path !== undefined) {
       project.result_path = updates.result_path;
@@ -165,6 +169,7 @@ class ProjectStore {
           name: p.name,
           path: p.path,
           commands: p.commands || (p.default_command ? [p.default_command] : []),
+          command_names: p.command_names || [],
           result_path: p.result_path,
         });
         imported++;
