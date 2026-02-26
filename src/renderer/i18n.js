@@ -1,0 +1,270 @@
+// === i18n — Internationalization Module ===
+let currentLocale = 'en';
+
+const translations = {
+  en: {
+    'sidebar.title': 'Projects',
+    'sidebar.import': 'Import',
+    'sidebar.export': 'Export',
+    'sidebar.newProject': 'New Project (⌘N)',
+    'sidebar.search': 'Search projects...',
+    'welcome.title': 'CC Launcher',
+    'welcome.subtitle': 'Select a project or create a new one',
+    'welcome.shortcut': 'to add project',
+    'details.edit': 'Edit',
+    'details.delete': 'Delete',
+    'details.projectPath': 'Project Path',
+    'details.resultPath': 'Result Path',
+    'details.open': 'Open',
+    'details.commands': 'Commands',
+    'modal.newProject': 'New Project',
+    'modal.editProject': 'Edit Project',
+    'modal.projectName': 'Project Name',
+    'modal.projectNamePlaceholder': 'My Project',
+    'modal.projectPath': 'Project Path',
+    'modal.selectProjectFolder': 'Select project folder',
+    'modal.browse': 'Browse',
+    'modal.commands': 'Commands',
+    'modal.addCommand': '+ Add Command',
+    'modal.resultPath': 'Result Path',
+    'modal.selectResultFolder': 'Select result folder',
+    'modal.cancel': 'Cancel',
+    'modal.save': 'Save',
+    'action.run': 'Run',
+    'msg.loadFailed': 'Failed to load projects',
+    'msg.noMatch': 'No matching projects',
+    'msg.noProjects': 'No projects yet',
+    'msg.emptyCommand': 'Command cannot be empty',
+    'msg.fillAllFields': 'Please fill all fields and add at least one command',
+    'msg.projectUpdated': 'Project updated',
+    'msg.projectAdded': 'Project added',
+    'msg.saveFailed': 'Save failed',
+    'msg.deleteTitle': 'Delete Project',
+    'msg.deleteConfirm': 'Are you sure you want to delete "{name}"? This cannot be undone.',
+    'msg.projectDeleted': 'Project deleted',
+    'msg.deleteFailed': 'Delete failed',
+    'msg.launching': 'Launching terminal...',
+    'msg.launched': 'Command launched in terminal',
+    'msg.execFailed': 'Execution failed',
+    'msg.exportFailed': 'Export failed',
+    'msg.exported': 'Settings exported',
+    'msg.invalidJson': 'Invalid JSON file',
+    'msg.imported': 'Imported {imported}, skipped {skipped}',
+    'msg.importFailed': 'Import failed',
+    'msg.minOneCommand': 'At least one command required',
+    'confirm.cancel': 'Cancel',
+    'confirm.delete': 'Delete',
+  },
+  zh: {
+    'sidebar.title': '项目',
+    'sidebar.import': '导入',
+    'sidebar.export': '导出',
+    'sidebar.newProject': '新建项目 (⌘N)',
+    'sidebar.search': '搜索项目...',
+    'welcome.title': 'CC 启动器',
+    'welcome.subtitle': '选择一个项目或创建新项目',
+    'welcome.shortcut': '添加项目',
+    'details.edit': '编辑',
+    'details.delete': '删除',
+    'details.projectPath': '项目路径',
+    'details.resultPath': '结果路径',
+    'details.open': '打开',
+    'details.commands': '命令',
+    'modal.newProject': '新建项目',
+    'modal.editProject': '编辑项目',
+    'modal.projectName': '项目名称',
+    'modal.projectNamePlaceholder': '我的项目',
+    'modal.projectPath': '项目路径',
+    'modal.selectProjectFolder': '选择项目文件夹',
+    'modal.browse': '浏览',
+    'modal.commands': '命令',
+    'modal.addCommand': '+ 添加命令',
+    'modal.resultPath': '结果路径',
+    'modal.selectResultFolder': '选择结果文件夹',
+    'modal.cancel': '取消',
+    'modal.save': '保存',
+    'action.run': '运行',
+    'msg.loadFailed': '加载项目失败',
+    'msg.noMatch': '没有匹配的项目',
+    'msg.noProjects': '暂无项目',
+    'msg.emptyCommand': '命令不能为空',
+    'msg.fillAllFields': '请填写所有字段并添加至少一条命令',
+    'msg.projectUpdated': '项目已更新',
+    'msg.projectAdded': '项目已添加',
+    'msg.saveFailed': '保存失败',
+    'msg.deleteTitle': '删除项目',
+    'msg.deleteConfirm': '确定要删除 "{name}" 吗？此操作不可撤销。',
+    'msg.projectDeleted': '项目已删除',
+    'msg.deleteFailed': '删除失败',
+    'msg.launching': '正在启动终端...',
+    'msg.launched': '命令已在终端中启动',
+    'msg.execFailed': '执行失败',
+    'msg.exportFailed': '导出失败',
+    'msg.exported': '设置已导出',
+    'msg.invalidJson': '无效的 JSON 文件',
+    'msg.imported': '已导入 {imported} 个，跳过 {skipped} 个',
+    'msg.importFailed': '导入失败',
+    'msg.minOneCommand': '至少需要一条命令',
+    'confirm.cancel': '取消',
+    'confirm.delete': '删除',
+  },
+  ja: {
+    'sidebar.title': 'プロジェクト',
+    'sidebar.import': 'インポート',
+    'sidebar.export': 'エクスポート',
+    'sidebar.newProject': '新規プロジェクト (⌘N)',
+    'sidebar.search': 'プロジェクトを検索...',
+    'welcome.title': 'CC ランチャー',
+    'welcome.subtitle': 'プロジェクトを選択するか、新規作成してください',
+    'welcome.shortcut': 'プロジェクトを追加',
+    'details.edit': '編集',
+    'details.delete': '削除',
+    'details.projectPath': 'プロジェクトパス',
+    'details.resultPath': '結果パス',
+    'details.open': '開く',
+    'details.commands': 'コマンド',
+    'modal.newProject': '新規プロジェクト',
+    'modal.editProject': 'プロジェクトを編集',
+    'modal.projectName': 'プロジェクト名',
+    'modal.projectNamePlaceholder': 'マイプロジェクト',
+    'modal.projectPath': 'プロジェクトパス',
+    'modal.selectProjectFolder': 'プロジェクトフォルダを選択',
+    'modal.browse': '参照',
+    'modal.commands': 'コマンド',
+    'modal.addCommand': '+ コマンドを追加',
+    'modal.resultPath': '結果パス',
+    'modal.selectResultFolder': '結果フォルダを選択',
+    'modal.cancel': 'キャンセル',
+    'modal.save': '保存',
+    'action.run': '実行',
+    'msg.loadFailed': 'プロジェクトの読み込みに失敗',
+    'msg.noMatch': '一致するプロジェクトがありません',
+    'msg.noProjects': 'プロジェクトがありません',
+    'msg.emptyCommand': 'コマンドを入力してください',
+    'msg.fillAllFields': 'すべてのフィールドを入力し、少なくとも1つのコマンドを追加してください',
+    'msg.projectUpdated': 'プロジェクトを更新しました',
+    'msg.projectAdded': 'プロジェクトを追加しました',
+    'msg.saveFailed': '保存に失敗しました',
+    'msg.deleteTitle': 'プロジェクトを削除',
+    'msg.deleteConfirm': '「{name}」を削除してもよろしいですか？この操作は取り消せません。',
+    'msg.projectDeleted': 'プロジェクトを削除しました',
+    'msg.deleteFailed': '削除に失敗しました',
+    'msg.launching': 'ターミナルを起動中...',
+    'msg.launched': 'ターミナルでコマンドを実行しました',
+    'msg.execFailed': '実行に失敗しました',
+    'msg.exportFailed': 'エクスポートに失敗しました',
+    'msg.exported': '設定をエクスポートしました',
+    'msg.invalidJson': '無効なJSONファイルです',
+    'msg.imported': '{imported}件インポート、{skipped}件スキップ',
+    'msg.importFailed': 'インポートに失敗しました',
+    'msg.minOneCommand': '少なくとも1つのコマンドが必要です',
+    'confirm.cancel': 'キャンセル',
+    'confirm.delete': '削除',
+  },
+  fr: {
+    'sidebar.title': 'Projets',
+    'sidebar.import': 'Importer',
+    'sidebar.export': 'Exporter',
+    'sidebar.newProject': 'Nouveau projet (⌘N)',
+    'sidebar.search': 'Rechercher des projets...',
+    'welcome.title': 'CC Launcher',
+    'welcome.subtitle': 'Sélectionnez un projet ou créez-en un nouveau',
+    'welcome.shortcut': 'pour ajouter un projet',
+    'details.edit': 'Modifier',
+    'details.delete': 'Supprimer',
+    'details.projectPath': 'Chemin du projet',
+    'details.resultPath': 'Chemin des résultats',
+    'details.open': 'Ouvrir',
+    'details.commands': 'Commandes',
+    'modal.newProject': 'Nouveau projet',
+    'modal.editProject': 'Modifier le projet',
+    'modal.projectName': 'Nom du projet',
+    'modal.projectNamePlaceholder': 'Mon projet',
+    'modal.projectPath': 'Chemin du projet',
+    'modal.selectProjectFolder': 'Sélectionner le dossier du projet',
+    'modal.browse': 'Parcourir',
+    'modal.commands': 'Commandes',
+    'modal.addCommand': '+ Ajouter une commande',
+    'modal.resultPath': 'Chemin des résultats',
+    'modal.selectResultFolder': 'Sélectionner le dossier des résultats',
+    'modal.cancel': 'Annuler',
+    'modal.save': 'Enregistrer',
+    'action.run': 'Exécuter',
+    'msg.loadFailed': 'Échec du chargement des projets',
+    'msg.noMatch': 'Aucun projet correspondant',
+    'msg.noProjects': 'Aucun projet pour le moment',
+    'msg.emptyCommand': 'La commande ne peut pas être vide',
+    'msg.fillAllFields': 'Veuillez remplir tous les champs et ajouter au moins une commande',
+    'msg.projectUpdated': 'Projet mis à jour',
+    'msg.projectAdded': 'Projet ajouté',
+    'msg.saveFailed': 'Échec de la sauvegarde',
+    'msg.deleteTitle': 'Supprimer le projet',
+    'msg.deleteConfirm': 'Êtes-vous sûr de vouloir supprimer « {name} » ? Cette action est irréversible.',
+    'msg.projectDeleted': 'Projet supprimé',
+    'msg.deleteFailed': 'Échec de la suppression',
+    'msg.launching': 'Lancement du terminal...',
+    'msg.launched': 'Commande lancée dans le terminal',
+    'msg.execFailed': "Échec de l'exécution",
+    'msg.exportFailed': "Échec de l'exportation",
+    'msg.exported': 'Paramètres exportés',
+    'msg.invalidJson': 'Fichier JSON invalide',
+    'msg.imported': '{imported} importé(s), {skipped} ignoré(s)',
+    'msg.importFailed': "Échec de l'importation",
+    'msg.minOneCommand': 'Au moins une commande est requise',
+    'confirm.cancel': 'Annuler',
+    'confirm.delete': 'Supprimer',
+  },
+};
+
+const SUPPORTED_LOCALES = ['en', 'zh', 'ja', 'fr'];
+const LOCALE_LABELS = { en: 'English', zh: '中文', ja: '日本語', fr: 'Français' };
+
+// Translate a key with optional parameter interpolation
+function t(key, params = {}) {
+  const dict = translations[currentLocale] || translations.en;
+  let text = dict[key] || translations.en[key] || key;
+  for (const [k, v] of Object.entries(params)) {
+    text = text.replace(`{${k}}`, v);
+  }
+  return text;
+}
+
+// Apply translations to all elements with data-i18n attributes
+function applyLocale() {
+  document.querySelectorAll('[data-i18n]').forEach((el) => {
+    el.textContent = t(el.dataset.i18n);
+  });
+  document.querySelectorAll('[data-i18n-placeholder]').forEach((el) => {
+    el.placeholder = t(el.dataset.i18nPlaceholder);
+  });
+  document.querySelectorAll('[data-i18n-title]').forEach((el) => {
+    el.title = t(el.dataset.i18nTitle);
+  });
+  document.documentElement.lang = currentLocale === 'zh' ? 'zh-CN' : currentLocale;
+}
+
+// Set locale and persist
+async function setLocale(locale) {
+  if (!SUPPORTED_LOCALES.includes(locale)) return;
+  currentLocale = locale;
+  applyLocale();
+  if (window.electronAPI?.setLocale) {
+    await window.electronAPI.setLocale(locale);
+  }
+}
+
+// Initialize locale from persisted setting or system
+async function initLocale() {
+  if (window.electronAPI?.getLocale) {
+    const saved = await window.electronAPI.getLocale();
+    if (saved && SUPPORTED_LOCALES.includes(saved)) {
+      currentLocale = saved;
+      applyLocale();
+      return;
+    }
+  }
+  // Fallback: detect from navigator
+  const sysLang = (navigator.language || 'en').slice(0, 2);
+  currentLocale = SUPPORTED_LOCALES.includes(sysLang) ? sysLang : 'en';
+  applyLocale();
+}

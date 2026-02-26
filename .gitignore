@@ -1,26 +1,12 @@
-# Python
-__pycache__/
-*.py[cod]
-*$py.class
-*.so
-.Python
-env/
-venv/
-ENV/
-*.egg-info/
+# Dependencies
+node_modules/
 
 # Build output
 dist/
-build/
-!build/generate_icon.py
-!build/icon.*
 
-# User data (personal paths, never commit)
-data/projects.json
-data/projects_backup.json
-backend/data/
-cc-launcher-settings.json
-*.json.bak
+# OS
+.DS_Store
+Thumbs.db
 
 # IDE
 .vscode/
@@ -28,17 +14,14 @@ cc-launcher-settings.json
 *.swp
 *.swo
 
-# OS
-.DS_Store
-Thumbs.db
+# User data (stored in system userData, never in project)
+data/
+*.json.bak
+cc-launcher-settings.json
 
 # Tool-specific
 .serena/
 
-# Dependencies
-node_modules/
-
-# BMad (keep these)
-!.bmad-core/
-!.spec-workflow/
-!.claude/
+# Keep build assets
+!build/icon.*
+!build/generate_icon.py

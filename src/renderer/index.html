@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self'; img-src 'self' data:">
+    <title>CC Launcher</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="container">
+        <!-- Sidebar -->
+        <div class="sidebar">
+            <div class="sidebar-header">
+                <h2 data-i18n="sidebar.title">Projects</h2>
+                <div class="header-buttons">
+                    <button id="importBtn" class="btn-icon" data-i18n-title="sidebar.import" title="Import">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                    </button>
+                    <button id="exportBtn" class="btn-icon" data-i18n-title="sidebar.export" title="Export">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                    </button>
+                    <button id="addProjectBtn" class="btn-icon-add" data-i18n-title="sidebar.newProject" title="New Project (⌘N)">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                    </button>
+                    <div class="lang-switcher">
+                        <button id="langBtn" class="btn-icon" title="Language">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+                        </button>
+                        <div id="langDropdown" class="lang-dropdown">
+                            <button class="lang-option" data-locale="en">English</button>
+                            <button class="lang-option" data-locale="zh">中文</button>
+                            <button class="lang-option" data-locale="ja">日本語</button>
+                            <button class="lang-option" data-locale="fr">Français</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="search-wrapper">
+                <div class="search-container">
+                    <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                    <input type="text" id="searchInput" class="search-input" data-i18n-placeholder="sidebar.search" placeholder="Search projects...">
+                </div>
+            </div>
+            <div class="project-list" id="projectList"></div>
+        </div>
+
+        <!-- Main Content -->
+        <div class="main-content">
+            <div class="welcome" id="welcomeMessage">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>
+                </svg>
+                <h1 data-i18n="welcome.title">CC Launcher</h1>
+                <p data-i18n="welcome.subtitle">Select a project or create a new one</p>
+                <div class="shortcut-hint">
+                    <kbd>⌘</kbd> + <kbd>N</kbd> <span data-i18n="welcome.shortcut">to add project</span>
+                </div>
+            </div>
+
+            <div class="project-details" id="projectDetails" style="display: none;">
+                <div class="details-header">
+                    <h2 id="projectName">Project Name</h2>
+                    <div class="action-buttons">
+                        <button id="editProjectBtn" class="btn-secondary">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="14" height="14"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                            <span data-i18n="details.edit">Edit</span>
+                        </button>
+                        <button id="deleteProjectBtn" class="btn-danger">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="14" height="14"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+                            <span data-i18n="details.delete">Delete</span>
+                        </button>
+                    </div>
+                </div>
+                <div class="details-content">
+                    <div class="info-item">
+                        <label data-i18n="details.projectPath">Project Path</label>
+                        <div class="info-value" id="projectPath"></div>
+                    </div>
+                    <div class="info-item">
+                        <label data-i18n="details.resultPath">Result Path</label>
+                        <div class="info-value">
+                            <span id="resultPath"></span>
+                            <button id="openResultBtn" class="btn-link">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="14" height="14"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+                                <span data-i18n="details.open">Open</span>
+                            </button>
+                        </div>
+                    </div>
+                    <div class="info-item">
+                        <label data-i18n="details.commands">Commands</label>
+                        <div id="commandsDisplay" class="commands-display"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal -->
+    <div id="projectModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 id="modalTitle" data-i18n="modal.newProject">New Project</h3>
+                <button class="close-btn" id="closeModalBtn">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" width="16" height="16"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label data-i18n="modal.projectName">Project Name</label>
+                    <input type="text" id="modalProjectName" class="form-input" data-i18n-placeholder="modal.projectNamePlaceholder" placeholder="My Project">
+                </div>
+                <div class="form-group">
+                    <label data-i18n="modal.projectPath">Project Path</label>
+                    <div class="input-with-button">
+                        <input type="text" id="modalProjectPath" class="form-input" data-i18n-placeholder="modal.selectProjectFolder" placeholder="Select project folder" readonly>
+                        <button id="browseProjectPathBtn" class="btn-browse">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="14" height="14"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+                            <span data-i18n="modal.browse">Browse</span>
+                        </button>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label data-i18n="modal.commands">Commands</label>
+                    <div id="commandsList" class="commands-list"></div>
+                    <button type="button" id="addCommandBtn" class="btn-add-command" data-i18n="modal.addCommand">+ Add Command</button>
+                </div>
+                <div class="form-group">
+                    <label data-i18n="modal.resultPath">Result Path</label>
+                    <div class="input-with-button">
+                        <input type="text" id="modalResultPath" class="form-input" data-i18n-placeholder="modal.selectResultFolder" placeholder="Select result folder" readonly>
+                        <button id="browseResultPathBtn" class="btn-browse">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="14" height="14"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+                            <span data-i18n="modal.browse">Browse</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button id="cancelModalBtn" class="btn-secondary" data-i18n="modal.cancel">Cancel</button>
+                <button id="saveProjectBtn" class="btn-primary" data-i18n="modal.save">Save</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast Container -->
+    <div id="toastContainer" class="toast-container"></div>
+
+    <script src="i18n.js"></script>
+    <script src="app.js"></script>
+</body>
+</html>
