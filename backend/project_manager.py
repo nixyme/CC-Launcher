@@ -8,20 +8,34 @@ import os
 from pathlib import Path
 from typing import List, Dict, Optional
 import uuid
+import shutil
+from datetime import datetime
 
 
 class ProjectManager:
     """项目管理器类"""
 
-    def __init__(self, data_file: str = "data/projects.json"):
+    def __init__(self, data_file: str = None):
         """
         初始化项目管理器
 
         Args:
             data_file: 项目数据文件路径
         """
+        if data_file is None:
+            # 检查是否有环境变量指定数据目录
+            app_data_dir = os.environ.get('APP_DATA_DIR', '')
+            if app_data_dir:
+                data_file = os.path.join(app_data_dir, 'data', 'projects.json')
+            else:
+                data_file = 'data/projects.json'
+
         self.data_file = Path(data_file)
+        self.backup_file = self.data_file.parent / 'projects_backup.json'
         self._ensure_data_file()
+
+        # 启动时立即备份
+        self._create_backup()
 
     def _ensure_data_file(self):
         """确保数据文件存在"""
@@ -48,14 +62,32 @@ class ProjectManager:
 
     def _save_projects(self, projects: List[Dict]):
         """
-        保存项目列表
+        保存项目列表，如果有变化则自动备份
 
         Args:
             projects: 项目列表
         """
         try:
+            # 先读取当前内容，用于比较是否有变化
+            has_changes = True
+            if self.data_file.exists():
+                try:
+                    with open(self.data_file, 'r', encoding='utf-8') as f:
+                        old_data = json.load(f)
+                    # 比较新旧数据是否相同
+                    has_changes = (old_data != projects)
+                except:
+                    # 如果读取失败，认为有变化
+                    has_changes = True
+
+            # 保存新数据
             with open(self.data_file, 'w', encoding='utf-8') as f:
                 json.dump(projects, f, ensure_ascii=False, indent=2)
+
+            # 如果有变化，创建备份
+            if has_changes:
+                self._create_backup()
+
         except Exception as e:
             print(f"保存项目数据失败: {e}")
             raise
@@ -160,16 +192,25 @@ class ProjectManager:
         self._save_projects(projects)
         return project
 
-    def delete_project(self, project_id: str):
+    def delete_project(self, project_id: str) -> bool:
         """
         删除项目
 
         Args:
             project_id: 项目ID
+
+        Returns:
+            如果项目存在并成功删除返回True,否则返回False
         """
         projects = self._load_projects()
+        original_count = len(projects)
         projects = [p for p in projects if p['id'] != project_id]
-        self._save_projects(projects)
+
+        # 检查是否真的删除了项目
+        if len(projects) < original_count:
+            self._save_projects(projects)
+            return True
+        return False
 
     def get_project(self, project_id: str) -> Optional[Dict]:
         """
@@ -238,3 +279,22 @@ class ProjectManager:
 
         self._save_projects(reordered)
         return True
+
+    def _create_backup(self):
+        """
+        创建项目配置备份，使用固定文件名，有变化时覆盖
+
+        备份文件名: projects_backup.json
+        """
+        try:
+            # 检查源文件是否存在且有内容
+            if not self.data_file.exists() or self.data_file.stat().st_size == 0:
+                return
+
+            # 复制文件到备份文件（覆盖）
+            shutil.copy2(self.data_file, self.backup_file)
+            timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            print(f"✅ 项目配置已备份 ({timestamp})")
+
+        except Exception as e:
+            print(f"❌ 创建备份失败: {e}")

@@ -1,2 +1,0 @@
-# 本项目使用 Python 内置的 tkinter,无需额外依赖
-# Python >= 3.8

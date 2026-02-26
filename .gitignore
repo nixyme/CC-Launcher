@@ -7,12 +7,20 @@ __pycache__/
 env/
 venv/
 ENV/
-build/
-dist/
 *.egg-info/
 
-# Data
+# Build output
+dist/
+build/
+!build/generate_icon.py
+!build/icon.*
+
+# User data (personal paths, never commit)
 data/projects.json
+data/projects_backup.json
+backend/data/
+cc-launcher-settings.json
+*.json.bak
 
 # IDE
 .vscode/
@@ -24,8 +32,13 @@ data/projects.json
 .DS_Store
 Thumbs.db
 
+# Tool-specific
+.serena/
+
+# Dependencies
+node_modules/
+
 # BMad (keep these)
 !.bmad-core/
 !.spec-workflow/
 !.claude/
-node_modules

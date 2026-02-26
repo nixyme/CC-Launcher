@@ -6,6 +6,8 @@ let projects = [];
 let currentProject = null;
 let isEditMode = false;
 let draggedElement = null;
+let loadRetries = 0;
+const MAX_LOAD_RETRIES = 5;
 
 // DOM 元素
 const projectList = document.getElementById('projectList');
@@ -25,6 +27,12 @@ function setupEventListeners() {
     document.getElementById('addProjectBtn').addEventListener('click', () => {
         openModal(false);
     });
+
+    // 导出设置按钮
+    document.getElementById('exportBtn').addEventListener('click', exportSettings);
+
+    // 导入设置按钮
+    document.getElementById('importBtn').addEventListener('click', importSettings);
 
     // 编辑项目按钮
     document.getElementById('editProjectBtn').addEventListener('click', () => {
@@ -85,13 +93,54 @@ function setupEventListeners() {
 async function loadProjects() {
     try {
         const response = await fetch(`${API_URL}/projects`);
-        if (!response.ok) throw new Error('Failed to load projects');
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
 
         projects = await response.json();
+        loadRetries = 0; // 重置重试计数
         renderProjectList();
     } catch (error) {
-        console.error('Error loading projects:', error);
-        showNotification('加载项目失败: ' + error.message, 'error');
+        console.error('加载项目失败:', error);
+
+        // 如果是第一次加载且失败,尝试重试
+        if (loadRetries < MAX_LOAD_RETRIES) {
+            loadRetries++;
+            console.log(`重试加载项目 (${loadRetries}/${MAX_LOAD_RETRIES})...`);
+            showNotification(`正在连接后端服务... (${loadRetries}/${MAX_LOAD_RETRIES})`, 'info');
+            setTimeout(loadProjects, 1000); // 1秒后重试
+        } else {
+            // 重试次数用尽,显示详细错误
+            let errorMsg = '无法连接到后端服务';
+            if (error.message.includes('fetch')) {
+                errorMsg += '\n\n可能的原因:\n1. 后端服务未启动\n2. 端口 5283 被占用\n3. Python 依赖未安装';
+            } else {
+                errorMsg += `: ${error.message}`;
+            }
+            showNotification(errorMsg, 'error');
+
+            // 在项目列表区域显示错误提示
+            projectList.innerHTML = `
+                <div style="padding: 20px; text-align: center; color: #e74c3c;">
+                    <div style="font-size: 48px; margin-bottom: 10px;">❌</div>
+                    <div style="font-weight: bold; margin-bottom: 10px;">无法连接到后端服务</div>
+                    <div style="font-size: 12px; color: #95a5a6; line-height: 1.6;">
+                        请检查:<br>
+                        • Python3 是否已安装<br>
+                        • Flask 依赖是否已安装<br>
+                        • 端口 5283 是否被占用<br><br>
+                        <button onclick="location.reload()" style="
+                            padding: 8px 16px;
+                            background: #3498db;
+                            color: white;
+                            border: none;
+                            border-radius: 4px;
+                            cursor: pointer;
+                        ">重新加载</button>
+                    </div>
+                </div>
+            `;
+        }
     }
 }
 
@@ -543,6 +592,74 @@ function escapeHtml(text) {
     const div = document.createElement('div');
     div.textContent = text;
     return div.innerHTML;
+}
+
+// 导出设置
+async function exportSettings() {
+    try {
+        // 从后端获取导出数据
+        const response = await fetch(`${API_URL}/projects/export`);
+        if (!response.ok) throw new Error('Failed to export');
+
+        const data = await response.json();
+        const jsonStr = JSON.stringify(data, null, 2);
+
+        // 保存到文件
+        const result = await window.electronAPI.saveFile(jsonStr, 'cc-launcher-settings.json');
+
+        if (!result.canceled) {
+            showNotification(`设置已导出到: ${result.path}`, 'success');
+        }
+    } catch (error) {
+        console.error('Export error:', error);
+        showNotification('导出失败: ' + error.message, 'error');
+    }
+}
+
+// 导入设置
+async function importSettings() {
+    try {
+        // 打开文件
+        const result = await window.electronAPI.openFile();
+
+        if (result.canceled) return;
+
+        // 解析 JSON
+        let data;
+        try {
+            data = JSON.parse(result.data);
+        } catch (e) {
+            throw new Error('无效的 JSON 文件');
+        }
+
+        // 发送到后端导入
+        const response = await fetch(`${API_URL}/projects/import`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data)
+        });
+
+        if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.error || 'Import failed');
+        }
+
+        const importResult = await response.json();
+        showNotification(`导入完成: ${importResult.imported} 个项目已导入, ${importResult.skipped} 个已跳过`, 'success');
+
+        // 重新加载项目列表
+        loadRetries = 0; // 重置重试计数
+        await loadProjects();
+    } catch (error) {
+        console.error('Import error:', error);
+        let errorMsg = '导入失败';
+        if (error.message.includes('fetch') || error.message.includes('Failed to fetch')) {
+            errorMsg = '导入失败: 无法连接到后端服务\n\n请确保后端服务正在运行';
+        } else {
+            errorMsg = '导入失败: ' + error.message;
+        }
+        showNotification(errorMsg, 'error');
+    }
 }
 
 // 添加动画样式

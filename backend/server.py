@@ -7,16 +7,21 @@ Flask 后端服务器
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 import sys
+import logging
 from pathlib import Path
 
-# 添加 src 目录到 Python 路径
-src_path = Path(__file__).parent.parent / 'src'
-sys.path.insert(0, str(src_path))
+# 添加 backend 目录到 Python 路径
+backend_path = Path(__file__).parent
+sys.path.insert(0, str(backend_path))
 
 from project_manager import ProjectManager
 
 app = Flask(__name__)
 CORS(app)  # 允许跨域请求
+
+# 配置日志：只显示错误
+log = logging.getLogger('werkzeug')
+log.setLevel(logging.ERROR)
 
 # 初始化项目管理器
 project_manager = ProjectManager()
@@ -127,6 +132,60 @@ def reorder_projects():
 def health_check():
     """健康检查"""
     return jsonify({'status': 'ok'}), 200
+
+
+@app.route('/projects/export', methods=['GET'])
+def export_projects():
+    """导出所有项目配置"""
+    try:
+        projects = project_manager.get_all_projects()
+        return jsonify({
+            'version': '1.0',
+            'projects': projects
+        }), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/projects/import', methods=['POST'])
+def import_projects():
+    """导入项目配置"""
+    try:
+        data = request.get_json()
+
+        if 'projects' not in data:
+            return jsonify({'error': 'Invalid import data: missing projects'}), 400
+
+        imported = 0
+        skipped = 0
+
+        for project_data in data['projects']:
+            try:
+                # 检查必要字段
+                if not all(k in project_data for k in ['name', 'path', 'default_command', 'result_path']):
+                    skipped += 1
+                    continue
+
+                # 尝试添加项目
+                project_manager.add_project(
+                    name=project_data['name'],
+                    path=project_data['path'],
+                    default_command=project_data['default_command'],
+                    result_path=project_data['result_path'],
+                    commands=project_data.get('commands')
+                )
+                imported += 1
+            except ValueError:
+                # 项目名已存在或路径不存在
+                skipped += 1
+
+        return jsonify({
+            'success': True,
+            'imported': imported,
+            'skipped': skipped
+        }), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
 
 if __name__ == '__main__':

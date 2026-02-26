@@ -12,7 +12,15 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
     // 选择文件夹
     selectFolder: () =>
-        ipcRenderer.invoke('select-folder')
+        ipcRenderer.invoke('select-folder'),
+
+    // 保存文件
+    saveFile: (data, defaultName) =>
+        ipcRenderer.invoke('save-file', { data, defaultName }),
+
+    // 打开文件
+    openFile: () =>
+        ipcRenderer.invoke('open-file')
 });
 
 // 暴露后端 API 地址
