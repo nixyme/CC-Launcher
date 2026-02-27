@@ -65,7 +65,7 @@
 ### 主界面 — 项目列表 + 详情
 
 <p align="center">
-  <img src="screenshots/main-ui.png" alt="主界面" width="800">
+  <img src="docs/screenshots/main-ui.png" alt="主界面" width="800">
 </p>
 
 > 左侧项目列表，右侧项目详情与命令面板。暗色主题，开发者风格。
@@ -73,7 +73,7 @@
 ### 新建项目
 
 <p align="center">
-  <img src="screenshots/new-project.png" alt="新建项目" width="800">
+  <img src="docs/screenshots/new-project.png" alt="新建项目" width="800">
 </p>
 
 > 填写项目名称、选择路径、配置命令，几秒完成。
@@ -81,7 +81,7 @@
 ### 命令执行
 
 <p align="center">
-  <img src="screenshots/command-run.png" alt="命令执行" width="800">
+  <img src="docs/screenshots/command-run.png" alt="命令执行" width="800">
 </p>
 
 > 每条命令可直接编辑，回车或点击 Run 即在终端中启动。
@@ -89,7 +89,7 @@
 ### 多语言切换
 
 <p align="center">
-  <img src="screenshots/i18n.png" alt="多语言" width="800">
+  <img src="docs/screenshots/i18n.png" alt="多语言" width="800">
 </p>
 
 > 右上角一键切换语言，界面实时刷新。
@@ -212,7 +212,11 @@ cc-launcher/
 │   │   └── i18n.js           # 国际化模块
 │   └── preload.js            # 预加载脚本 (安全桥接)
 ├── build/                    # 构建资源 (图标)
-├── screenshots/              # 截图
+├── docs/                     # 文档与截图
+│   ├── screenshots/          # README 截图
+│   ├── ELECTRON_BEST_PRACTICES.md
+│   └── ELECTRON_ICON_GUIDE.md
+├── run.sh                    # 一键启动脚本
 ├── package.json
 └── LICENSE
 ```

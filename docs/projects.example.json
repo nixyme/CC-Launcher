@@ -1,0 +1,11 @@
+[
+  {
+    "id": "example-uuid-1",
+    "name": "示例项目",
+    "path": "/path/to/your/project",
+    "commands": ["claude --dangerously-skip-permissions 你的指令"],
+    "default_command": "claude --dangerously-skip-permissions 你的指令",
+    "result_path": "/path/to/results",
+    "order": 0
+  }
+]
