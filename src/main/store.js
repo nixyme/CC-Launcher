@@ -8,6 +8,8 @@ class ProjectStore {
     this.dataFile = path.join(this.dataDir, 'projects.json');
     this.backupFile = path.join(this.dataDir, 'projects_backup.json');
     this.settingsFile = path.join(this.dataDir, 'settings.json');
+    this.schedulesFile = path.join(this.dataDir, 'schedules.json');
+    this.scheduleLogsFile = path.join(this.dataDir, 'schedule-logs.json');
     this._ensureDataFile();
     this._createBackup();
   }
@@ -67,7 +69,7 @@ class ProjectStore {
     return this._loadProjects().find((p) => p.id === id) || null;
   }
 
-  addProject({ name, path: projPath, commands, command_names, result_path }) {
+  addProject({ name, path: projPath, commands, command_names, command_modes, result_path }) {
     const projects = this._loadProjects();
     if (projects.some((p) => p.name === name)) {
       throw new Error(`Project name '${name}' already exists`);
@@ -83,6 +85,7 @@ class ProjectStore {
       path: projPath,
       commands: commands || [],
       command_names: command_names || [],
+      command_modes: command_modes || [],
       default_command: commands?.[0] || '',
       result_path: result_path || '',
       order: 0,
@@ -116,6 +119,9 @@ class ProjectStore {
     }
     if (updates.command_names !== undefined) {
       project.command_names = updates.command_names;
+    }
+    if (updates.command_modes !== undefined) {
+      project.command_modes = updates.command_modes;
     }
     if (updates.result_path !== undefined) {
       project.result_path = updates.result_path;
@@ -155,7 +161,11 @@ class ProjectStore {
   }
 
   exportData() {
-    return { version: '1.0', projects: this.getAllProjects() };
+    return {
+      version: '1.1',
+      projects: this.getAllProjects(),
+      schedules: this._loadSchedules(),
+    };
   }
 
   importData(data) {
@@ -170,10 +180,22 @@ class ProjectStore {
           path: p.path,
           commands: p.commands || (p.default_command ? [p.default_command] : []),
           command_names: p.command_names || [],
+          command_modes: p.command_modes || [],
           result_path: p.result_path,
         });
         imported++;
       } catch { skipped++; }
+    }
+    // Import schedules if present
+    if (data.schedules && Array.isArray(data.schedules)) {
+      const existing = this._loadSchedules();
+      const existingIds = new Set(existing.map(s => s.id));
+      for (const s of data.schedules) {
+        if (s.id && !existingIds.has(s.id)) {
+          existing.push(s);
+        }
+      }
+      this._saveSchedules(existing);
     }
     return { imported, skipped };
   }
@@ -213,6 +235,111 @@ class ProjectStore {
     const settings = this._loadSettings();
     settings[key] = value;
     this._saveSettings(settings);
+  }
+
+  // --- Schedules ---
+  _loadSchedules() {
+    try {
+      if (fs.existsSync(this.schedulesFile)) {
+        return JSON.parse(fs.readFileSync(this.schedulesFile, 'utf-8'));
+      }
+    } catch { /* ignore */ }
+    return [];
+  }
+
+  _saveSchedules(schedules) {
+    fs.writeFileSync(this.schedulesFile, JSON.stringify(schedules, null, 2), 'utf-8');
+  }
+
+  getAllSchedules() {
+    return this._loadSchedules();
+  }
+
+  getScheduleForCommand(projectId, commandIndex) {
+    return this._loadSchedules().find(
+      (s) => s.projectId === projectId && s.commandIndex === commandIndex
+    ) || null;
+  }
+
+  addSchedule(schedule) {
+    const schedules = this._loadSchedules();
+    const entry = { id: uuidv4(), ...schedule, lastRunAt: null, lastExitCode: null };
+    schedules.push(entry);
+    this._saveSchedules(schedules);
+    return entry;
+  }
+
+  updateSchedule(id, updates) {
+    const schedules = this._loadSchedules();
+    const idx = schedules.findIndex((s) => s.id === id);
+    if (idx === -1) throw new Error(`Schedule not found: ${id}`);
+    Object.assign(schedules[idx], updates);
+    this._saveSchedules(schedules);
+    return schedules[idx];
+  }
+
+  updateScheduleMeta(id, meta) {
+    const schedules = this._loadSchedules();
+    const idx = schedules.findIndex((s) => s.id === id);
+    if (idx === -1) return;
+    Object.assign(schedules[idx], meta);
+    this._saveSchedules(schedules);
+  }
+
+  deleteSchedule(id) {
+    const schedules = this._loadSchedules();
+    const filtered = schedules.filter((s) => s.id !== id);
+    if (filtered.length === schedules.length) return false;
+    this._saveSchedules(filtered);
+    return true;
+  }
+
+  deleteSchedulesByProject(projectId) {
+    const schedules = this._loadSchedules();
+    const filtered = schedules.filter((s) => s.projectId !== projectId);
+    this._saveSchedules(filtered);
+    return schedules.length - filtered.length;
+  }
+
+  // --- Schedule Logs ---
+  _loadScheduleLogs() {
+    try {
+      if (fs.existsSync(this.scheduleLogsFile)) {
+        return JSON.parse(fs.readFileSync(this.scheduleLogsFile, 'utf-8'));
+      }
+    } catch { /* ignore */ }
+    return [];
+  }
+
+  _saveScheduleLogs(logs) {
+    fs.writeFileSync(this.scheduleLogsFile, JSON.stringify(logs, null, 2), 'utf-8');
+  }
+
+  addScheduleLog(log) {
+    const logs = this._loadScheduleLogs();
+    const entry = { id: uuidv4(), ...log };
+    logs.unshift(entry);
+    // 上限 500 条
+    if (logs.length > 500) logs.length = 500;
+    this._saveScheduleLogs(logs);
+    return entry;
+  }
+
+  getScheduleLogs({ scheduleId, limit = 50, offset = 0 } = {}) {
+    let logs = this._loadScheduleLogs();
+    if (scheduleId) logs = logs.filter((l) => l.scheduleId === scheduleId);
+    const total = logs.length;
+    return { total, logs: logs.slice(offset, offset + limit) };
+  }
+
+  clearScheduleLogs(scheduleId) {
+    const logs = this._loadScheduleLogs();
+    const filtered = logs.filter((l) => l.scheduleId !== scheduleId);
+    this._saveScheduleLogs(filtered);
+  }
+
+  clearAllScheduleLogs() {
+    this._saveScheduleLogs([]);
   }
 }
 

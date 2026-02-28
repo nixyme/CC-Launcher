@@ -15,8 +15,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
   importProjects: (data) => ipcRenderer.invoke('import-projects', data),
 
   // 命令执行
-  executeCommand: (projectPath, command) =>
-    ipcRenderer.invoke('execute-command', { projectPath, command }),
+  executeCommand: (projectPath, command, projectName, commandName) =>
+    ipcRenderer.invoke('execute-command', { projectPath, command, projectName, commandName }),
+  executeCommandSilent: (projectPath, command, projectName, commandName) =>
+    ipcRenderer.invoke('execute-command-silent', { projectPath, command, projectName, commandName }),
 
   // 文件夹操作
   openFolder: (folderPath) => ipcRenderer.invoke('open-folder', folderPath),
@@ -59,4 +61,24 @@ contextBridge.exposeInMainWorld('electronAPI', {
   onUpdateDownloadProgress: (cb) => ipcRenderer.on('update-download-progress', (_e, p) => cb(p)),
   onUpdateDownloaded: (cb) => ipcRenderer.on('update-downloaded', () => cb()),
   onUpdateError: (cb) => ipcRenderer.on('update-error', (_e, msg) => cb(msg)),
+
+  // 定时任务
+  getSchedules: () => ipcRenderer.invoke('get-schedules'),
+  getScheduleForCommand: (projectId, commandIndex) =>
+    ipcRenderer.invoke('get-schedule-for-command', { projectId, commandIndex }),
+  addSchedule: (data) => ipcRenderer.invoke('add-schedule', data),
+  updateSchedule: (id, updates) => ipcRenderer.invoke('update-schedule', { id, updates }),
+  deleteSchedule: (id) => ipcRenderer.invoke('delete-schedule', id),
+  toggleSchedule: (id, enabled) => ipcRenderer.invoke('toggle-schedule', { id, enabled }),
+
+  // 定时任务日志
+  getScheduleLogs: (opts) => ipcRenderer.invoke('get-schedule-logs', opts),
+  clearScheduleLogs: (scheduleId) => ipcRenderer.invoke('clear-schedule-logs', scheduleId),
+
+  // Cron 校验
+  validateCron: (expression) => ipcRenderer.invoke('validate-cron', expression),
+
+  // 定时任务执行事件
+  onScheduleExecuted: (cb) => ipcRenderer.on('schedule-executed', (_e, data) => cb(data)),
+  onSilentExecutionComplete: (cb) => ipcRenderer.on('silent-execution-complete', (_e, data) => cb(data)),
 });

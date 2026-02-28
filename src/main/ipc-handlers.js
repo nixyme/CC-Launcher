@@ -47,7 +47,7 @@ function normalizeCommandPath(command, projectPath) {
   return command;
 }
 
-function registerIpcHandlers(store, autoUpdater, getMainWindow) {
+function registerIpcHandlers(store, autoUpdater, getMainWindow, scheduler) {
   // --- 项目 CRUD ---
   ipcMain.handle('get-projects', () => {
     try {
@@ -77,6 +77,14 @@ function registerIpcHandlers(store, autoUpdater, getMainWindow) {
 
   ipcMain.handle('delete-project', (_event, id) => {
     try {
+      // 联动清理该项目的所有 schedule 和日志
+      if (scheduler) {
+        const schedules = store.getAllSchedules().filter(s => s.projectId === id);
+        for (const s of schedules) {
+          store.clearScheduleLogs(s.id);
+        }
+        scheduler.removeSchedulesByProject(id);
+      }
       const result = store.deleteProject(id);
       return { success: true, data: result };
     } catch (e) {
@@ -121,7 +129,7 @@ function registerIpcHandlers(store, autoUpdater, getMainWindow) {
   });
 
   // --- 命令执行（支持终端选择） ---
-  ipcMain.handle('execute-command', (_event, { projectPath, command }) => {
+  ipcMain.handle('execute-command', (_event, { projectPath, command, projectName, commandName }) => {
     return new Promise((resolve) => {
       if (!isRegisteredProject(store, projectPath)) {
         resolve({ success: false, error: 'Unregistered project path' });
@@ -132,12 +140,12 @@ function registerIpcHandlers(store, autoUpdater, getMainWindow) {
         return;
       }
 
+      const startTime = new Date().toISOString();
       const platform = process.platform;
       const terminal = store.getSetting('terminal') || 'default';
       let proc;
 
       // 智能处理命令中的文件路径：自动补 ./ 和引号
-      // 逐步尝试更长的前缀，找到真实存在的文件路径
       command = normalizeCommandPath(command, projectPath);
 
       if (platform === 'darwin') {
@@ -149,7 +157,6 @@ function registerIpcHandlers(store, autoUpdater, getMainWindow) {
           proc = spawn('open', ['-n', '-a', 'Kaku', '--args', 'start', '--always-new-process', '--cwd', projectPath, '--', 'bash', '-c', "cd '" + projectPath + "' && " + command + "; exec bash"], { detached: true });
           proc.unref();
         } else {
-          // Default: Terminal.app via AppleScript（单引号包裹路径避免转义问题）
           const safePath = projectPath.replace(/'/g, "'\\'");
           const script = `tell application "Terminal"
   activate
@@ -184,8 +191,148 @@ end tell`;
         return;
       }
 
-      proc.on('close', (code) => resolve({ success: true, code }));
-      proc.on('error', (err) => resolve({ success: false, error: err.message }));
+      proc.on('close', (code) => {
+        // 终端执行也记录日志（无 stdout 捕获，仅记录事件）
+        store.addScheduleLog({
+          scheduleId: null,
+          projectName: projectName || '',
+          commandName: commandName || '',
+          command,
+          startTime,
+          endTime: new Date().toISOString(),
+          durationMs: Date.now() - new Date(startTime).getTime(),
+          exitCode: code,
+          stdout: '',
+          stderr: '',
+          status: code === 0 ? 'success' : (code === null ? 'success' : 'failed'),
+          trigger: 'manual',
+          mode: 'terminal',
+        });
+        resolve({ success: true, code });
+      });
+      proc.on('error', (err) => {
+        store.addScheduleLog({
+          scheduleId: null,
+          projectName: projectName || '',
+          commandName: commandName || '',
+          command,
+          startTime,
+          endTime: new Date().toISOString(),
+          durationMs: Date.now() - new Date(startTime).getTime(),
+          exitCode: -1,
+          stdout: '',
+          stderr: err.message,
+          status: 'error',
+          trigger: 'manual',
+          mode: 'terminal',
+        });
+        resolve({ success: false, error: err.message });
+      });
+    });
+  });
+
+  // --- 静默执行命令 ---
+  ipcMain.handle('execute-command-silent', (_event, { projectPath, command, projectName, commandName }) => {
+    return new Promise((resolve) => {
+      if (!isRegisteredProject(store, projectPath)) {
+        resolve({ success: false, error: 'Unregistered project path' });
+        return;
+      }
+      if (!fs.existsSync(projectPath)) {
+        resolve({ success: false, error: 'Project path does not exist' });
+        return;
+      }
+
+      command = normalizeCommandPath(command, projectPath);
+
+      const startTime = new Date().toISOString();
+      const MAX_OUTPUT = 10 * 1024;
+      let stdout = '';
+      let stderr = '';
+
+      const proc = spawn('bash', ['-c', `cd '${projectPath.replace(/'/g, "'\\''")}' && ${command}`], {
+        detached: false,
+        stdio: ['ignore', 'pipe', 'pipe'],
+        env: { ...process.env, ELECTRON_RUN_AS_NODE: undefined },
+      });
+
+      proc.stdout.on('data', (data) => {
+        if (stdout.length < MAX_OUTPUT) {
+          stdout += data.toString();
+          if (stdout.length > MAX_OUTPUT) stdout = stdout.slice(0, MAX_OUTPUT);
+        }
+      });
+
+      proc.stderr.on('data', (data) => {
+        if (stderr.length < MAX_OUTPUT) {
+          stderr += data.toString();
+          if (stderr.length > MAX_OUTPUT) stderr = stderr.slice(0, MAX_OUTPUT);
+        }
+      });
+
+      // 默认 60 分钟超时
+      const timer = setTimeout(() => {
+        try { proc.kill('SIGTERM'); } catch { /* ignore */ }
+        setTimeout(() => {
+          try { proc.kill('SIGKILL'); } catch { /* ignore */ }
+        }, 5000);
+      }, 60 * 60 * 1000);
+
+      proc.on('close', (code, signal) => {
+        clearTimeout(timer);
+        const endTime = new Date().toISOString();
+        const durationMs = Date.now() - new Date(startTime).getTime();
+        let status = 'success';
+        if (signal === 'SIGTERM' || signal === 'SIGKILL') status = 'timeout';
+        else if (code !== 0) status = 'failed';
+
+        store.addScheduleLog({
+          scheduleId: null,
+          projectName: projectName || '',
+          commandName: commandName || '',
+          command,
+          startTime,
+          endTime,
+          durationMs,
+          exitCode: code,
+          stdout,
+          stderr,
+          status,
+          trigger: 'manual',
+          mode: 'silent',
+        });
+
+        // 通知渲染进程
+        const win = getMainWindow();
+        if (win && !win.isDestroyed()) {
+          win.webContents.send('silent-execution-complete', {
+            projectName, commandName, command, status, durationMs,
+          });
+        }
+
+        resolve({ success: status === 'success', code, stdout, stderr, status, durationMs });
+      });
+
+      proc.on('error', (err) => {
+        clearTimeout(timer);
+        const endTime = new Date().toISOString();
+        store.addScheduleLog({
+          scheduleId: null,
+          projectName: projectName || '',
+          commandName: commandName || '',
+          command,
+          startTime,
+          endTime,
+          durationMs: Date.now() - new Date(startTime).getTime(),
+          exitCode: -1,
+          stdout,
+          stderr: err.message,
+          status: 'error',
+          trigger: 'manual',
+          mode: 'silent',
+        });
+        resolve({ success: false, error: err.message, status: 'error' });
+      });
     });
   });
 
@@ -389,6 +536,89 @@ end tell`;
     if (!autoUpdater) return { success: false, error: 'Updater not available' };
     autoUpdater.quitAndInstall(false, true);
     return { success: true };
+  });
+
+  // --- Schedule CRUD ---
+  ipcMain.handle('get-schedules', () => {
+    try {
+      return { success: true, data: store.getAllSchedules() };
+    } catch (e) {
+      return { success: false, error: e.message };
+    }
+  });
+
+  ipcMain.handle('get-schedule-for-command', (_event, { projectId, commandIndex }) => {
+    try {
+      const schedule = store.getScheduleForCommand(projectId, commandIndex);
+      return { success: true, data: schedule };
+    } catch (e) {
+      return { success: false, error: e.message };
+    }
+  });
+
+  ipcMain.handle('add-schedule', (_event, data) => {
+    try {
+      if (!scheduler) return { success: false, error: 'Scheduler not available' };
+      const result = scheduler.addSchedule(data);
+      return { success: true, data: result };
+    } catch (e) {
+      return { success: false, error: e.message };
+    }
+  });
+
+  ipcMain.handle('update-schedule', (_event, { id, updates }) => {
+    try {
+      if (!scheduler) return { success: false, error: 'Scheduler not available' };
+      const result = scheduler.updateSchedule(id, updates);
+      return { success: true, data: result };
+    } catch (e) {
+      return { success: false, error: e.message };
+    }
+  });
+
+  ipcMain.handle('delete-schedule', (_event, id) => {
+    try {
+      if (!scheduler) return { success: false, error: 'Scheduler not available' };
+      const result = scheduler.removeSchedule(id);
+      return { success: true, data: result };
+    } catch (e) {
+      return { success: false, error: e.message };
+    }
+  });
+
+  ipcMain.handle('toggle-schedule', (_event, { id, enabled }) => {
+    try {
+      if (!scheduler) return { success: false, error: 'Scheduler not available' };
+      const result = scheduler.toggleSchedule(id, enabled);
+      return { success: true, data: result };
+    } catch (e) {
+      return { success: false, error: e.message };
+    }
+  });
+
+  // --- Schedule Logs ---
+  ipcMain.handle('get-schedule-logs', (_event, opts) => {
+    try {
+      return { success: true, data: store.getScheduleLogs(opts || {}) };
+    } catch (e) {
+      return { success: false, error: e.message };
+    }
+  });
+
+  ipcMain.handle('clear-schedule-logs', (_event, scheduleId) => {
+    try {
+      if (scheduleId) store.clearScheduleLogs(scheduleId);
+      else store.clearAllScheduleLogs();
+      return { success: true };
+    } catch (e) {
+      return { success: false, error: e.message };
+    }
+  });
+
+  // --- Cron Validation ---
+  ipcMain.handle('validate-cron', (_event, expression) => {
+    const cron = require('node-cron');
+    return { valid: cron.validate(expression) };
   });
 }
 

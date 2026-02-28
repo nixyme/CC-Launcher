@@ -1,10 +1,12 @@
 const { app, BrowserWindow, nativeImage, globalShortcut } = require('electron');
 const path = require('path');
 const ProjectStore = require('./store');
+const Scheduler = require('./scheduler');
 const { registerIpcHandlers } = require('./ipc-handlers');
 
 let mainWindow;
 let store;
+let scheduler;
 
 const isDev = !app.isPackaged;
 
@@ -113,11 +115,15 @@ app.whenReady().then(() => {
   const userDataPath = app.getPath('userData');
   store = new ProjectStore(userDataPath);
 
+  // 初始化调度引擎
+  scheduler = new Scheduler(store, () => mainWindow);
+  scheduler.init();
+
   // 初始化自动更新
   const autoUpdater = setupAutoUpdater();
 
   // 注册 IPC 处理（传入 getMainWindow 函数以便 IPC 获取窗口引用）
-  registerIpcHandlers(store, autoUpdater, () => mainWindow);
+  registerIpcHandlers(store, autoUpdater, () => mainWindow, scheduler);
 
   // 直接创建窗口
   mainWindow = createWindow();
@@ -134,6 +140,7 @@ app.whenReady().then(() => {
 });
 
 app.on('will-quit', () => {
+  if (scheduler) scheduler.shutdown();
   globalShortcut.unregisterAll();
 });
 

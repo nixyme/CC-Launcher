@@ -4,6 +4,7 @@ let currentProject = null;
 let isEditMode = false;
 let draggedElement = null;
 let searchQuery = '';
+let commandScheduleCache = {}; // projectId → { cmdIndex: schedule }
 
 // === DOM ===
 const projectList = document.getElementById('projectList');
@@ -22,6 +23,9 @@ const icons = {
   info: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>',
   trash: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="40" height="40"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>',
   folder: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" width="40" height="40"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>',
+  clock: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l2 2"/><path d="M5 3L2 6"/><path d="M22 6l-3-3"/></svg>',
+  terminal: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="14" height="14"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>',
+  silent: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="14" height="14"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>',
 };
 
 // === Init ===
@@ -32,6 +36,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   setupKeyboardShortcuts();
   setupSettings();
   setupAutoUpdater();
+  setupScheduleEvents();
 });
 
 // === Event Listeners ===
@@ -87,6 +92,7 @@ function setupEventListeners() {
   document.getElementById('saveProjectBtn').addEventListener('click', saveProject);
   document.getElementById('addCommandBtn').addEventListener('click', addCommandInput);
   document.getElementById('settingsBtn').addEventListener('click', openSettings);
+  document.getElementById('scheduleLogsBtn').addEventListener('click', openScheduleLogsModal);
 
   document.getElementById('browseProjectPathBtn').addEventListener('click', async () => {
     const result = await window.electronAPI.selectFolder();
@@ -254,7 +260,10 @@ function showProjectDetails() {
   // Hide output path section if empty
   const outputSection = document.getElementById('outputPathSection');
   if (outputSection) outputSection.style.display = currentProject.result_path ? '' : 'none';
-  renderCommandsDisplay();
+  // Load schedule cache for current project then render commands
+  loadScheduleCacheForProject(currentProject.id).then(() => {
+    renderCommandsDisplay();
+  });
 }
 
 function renderCommandsDisplay() {
@@ -262,6 +271,7 @@ function renderCommandsDisplay() {
   display.innerHTML = '';
   const commands = currentProject.commands || [];
   const names = currentProject.command_names || [];
+  const modes = currentProject.command_modes || [];
   let firstVarInput = null;
   let firstVarPos = -1;
 
@@ -271,6 +281,8 @@ function renderCommandsDisplay() {
     wrapper.className = 'command-button-wrapper';
     wrapper.draggable = true;
     wrapper.dataset.cmdIndex = index;
+
+    const mode = modes[index] || 'terminal';
 
     // Drag handle
     const handle = document.createElement('span');
@@ -286,7 +298,7 @@ function renderCommandsDisplay() {
     input.addEventListener('keydown', (e) => {
       if (e.key === 'Enter') {
         const cmd = input.value.trim();
-        if (cmd) executeCommand(cmd);
+        if (cmd) executeCommand(cmd, index);
       }
     });
 
@@ -304,18 +316,53 @@ function renderCommandsDisplay() {
     nameInput.value = names[index] || '';
     nameInput.placeholder = t('details.cmdName') || 'Name';
 
+    // Mode toggle button (terminal ↔ silent)
+    const modeBtn = document.createElement('button');
+    modeBtn.className = 'btn-mode-toggle' + (mode === 'silent' ? ' mode-silent' : '');
+    modeBtn.innerHTML = mode === 'silent' ? icons.silent : icons.terminal;
+    modeBtn.title = mode === 'silent' ? t('mode.clickToTerminal') : t('mode.clickToSilent');
+    modeBtn.addEventListener('click', async () => {
+      const newMode = mode === 'silent' ? 'terminal' : 'silent';
+      const newModes = [...(currentProject.command_modes || [])];
+      while (newModes.length <= index) newModes.push('terminal');
+      newModes[index] = newMode;
+      currentProject.command_modes = newModes;
+      await window.electronAPI.updateProject(currentProject.id, { command_modes: newModes });
+      renderCommandsDisplay();
+    });
+
+    // Schedule (闹钟) button
+    const cachedSchedule = commandScheduleCache[currentProject.id]?.[index];
+    const scheduleBtn = document.createElement('button');
+    scheduleBtn.className = 'btn-schedule-command';
+    scheduleBtn.innerHTML = icons.clock;
+    scheduleBtn.title = t('schedule.title') || 'Schedule';
+    if (cachedSchedule && cachedSchedule.enabled) {
+      scheduleBtn.classList.add('schedule-active');
+    }
+    scheduleBtn.addEventListener('click', () => {
+      openScheduleDialog(currentProject, index, input.value.trim(), names[index] || '');
+    });
+
     const execBtn = document.createElement('button');
     execBtn.className = 'btn-execute-command';
-    execBtn.innerHTML = `${icons.play} ${t('action.run')}`;
+    if (mode === 'silent') {
+      execBtn.innerHTML = `${icons.silent} ${t('action.runSilent')}`;
+      execBtn.classList.add('btn-execute-silent');
+    } else {
+      execBtn.innerHTML = `${icons.play} ${t('action.run')}`;
+    }
     execBtn.addEventListener('click', () => {
       const cmd = input.value.trim();
-      if (cmd) executeCommand(cmd);
+      if (cmd) executeCommand(cmd, index);
       else showToast(t('msg.emptyCommand'), 'error');
     });
 
     wrapper.appendChild(handle);
     wrapper.appendChild(input);
     wrapper.appendChild(nameInput);
+    wrapper.appendChild(modeBtn);
+    wrapper.appendChild(scheduleBtn);
     wrapper.appendChild(execBtn);
     display.appendChild(wrapper);
     setupCommandInputDragDrop(input);
@@ -350,9 +397,13 @@ function renderCommandsDisplay() {
       const nms = [...(currentProject.command_names || [])];
       const [movedName] = nms.splice(fromIdx, 1);
       nms.splice(toIdx, 0, movedName || '');
+      const mds = [...(currentProject.command_modes || [])];
+      const [movedMode] = mds.splice(fromIdx, 1);
+      mds.splice(toIdx, 0, movedMode || 'terminal');
       currentProject.commands = cmds;
       currentProject.command_names = nms;
-      window.electronAPI.updateProject(currentProject.id, { commands: cmds, command_names: nms });
+      currentProject.command_modes = mds;
+      window.electronAPI.updateProject(currentProject.id, { commands: cmds, command_names: nms, command_modes: mds });
       renderCommandsDisplay();
     });
 
@@ -379,26 +430,26 @@ function openModal(editMode = false, project = null) {
     document.getElementById('modalProjectName').value = project.name;
     document.getElementById('modalProjectPath').value = project.path;
     document.getElementById('modalOutputPath').value = project.result_path;
-    renderCommandInputs(project.commands || [], project.command_names || []);
+    renderCommandInputs(project.commands || [], project.command_names || [], project.command_modes || []);
   } else {
     document.getElementById('modalProjectName').value = '';
     document.getElementById('modalProjectPath').value = '';
     document.getElementById('modalOutputPath').value = '';
-    renderCommandInputs(['claude --dangerously-skip-permissions '], ['']);
+    renderCommandInputs(['claude --dangerously-skip-permissions '], [''], ['terminal']);
   }
   projectModal.classList.add('show');
   // Focus first input after animation
   setTimeout(() => document.getElementById('modalProjectName').focus(), 220);
 }
 
-function renderCommandInputs(commands = [], names = []) {
+function renderCommandInputs(commands = [], names = [], modes = []) {
   const list = document.getElementById('commandsList');
   list.innerHTML = '';
-  if (commands.length === 0) { commands = ['']; names = ['']; }
-  commands.forEach((cmd, i) => addCommandInputWithValue(cmd, names[i] || ''));
+  if (commands.length === 0) { commands = ['']; names = ['']; modes = ['terminal']; }
+  commands.forEach((cmd, i) => addCommandInputWithValue(cmd, names[i] || '', modes[i] || 'terminal'));
 }
 
-function addCommandInputWithValue(value = '', name = '') {
+function addCommandInputWithValue(value = '', name = '', mode = 'terminal') {
   const list = document.getElementById('commandsList');
   const item = document.createElement('div');
   item.className = 'command-item';
@@ -412,6 +463,23 @@ function addCommandInputWithValue(value = '', name = '') {
   nameInput.className = 'form-input command-name-field';
   nameInput.placeholder = t('modal.cmdName') || 'Name';
   nameInput.value = name;
+
+  // Mode toggle for modal
+  const modeBtn = document.createElement('button');
+  modeBtn.type = 'button';
+  modeBtn.className = 'btn-mode-toggle-modal' + (mode === 'silent' ? ' mode-silent' : '');
+  modeBtn.innerHTML = mode === 'silent' ? icons.silent : icons.terminal;
+  modeBtn.title = mode === 'silent' ? t('mode.clickToTerminal') : t('mode.clickToSilent');
+  modeBtn.dataset.mode = mode;
+  modeBtn.addEventListener('click', () => {
+    const cur = modeBtn.dataset.mode;
+    const newMode = cur === 'silent' ? 'terminal' : 'silent';
+    modeBtn.dataset.mode = newMode;
+    modeBtn.innerHTML = newMode === 'silent' ? icons.silent : icons.terminal;
+    modeBtn.title = newMode === 'silent' ? t('mode.clickToTerminal') : t('mode.clickToSilent');
+    modeBtn.classList.toggle('mode-silent', newMode === 'silent');
+  });
+
   const browseBtn = document.createElement('button');
   browseBtn.type = 'button';
   browseBtn.className = 'btn-browse-cmd';
@@ -439,13 +507,14 @@ function addCommandInputWithValue(value = '', name = '') {
   });
   item.appendChild(input);
   item.appendChild(nameInput);
+  item.appendChild(modeBtn);
   item.appendChild(browseBtn);
   item.appendChild(removeBtn);
   list.appendChild(item);
 }
 
 function addCommandInput() {
-  addCommandInputWithValue('claude --dangerously-skip-permissions ', '');
+  addCommandInputWithValue('claude --dangerously-skip-permissions ', '', 'terminal');
 }
 
 function closeModal() { projectModal.classList.remove('show'); }
@@ -458,13 +527,17 @@ async function saveProject() {
   const commandItems = document.querySelectorAll('#commandsList .command-item');
   const commands = [];
   const commandNames = [];
+  const commandModes = [];
   commandItems.forEach(item => {
     const inputs = item.querySelectorAll('input');
     const cmd = inputs[0].value.trim();
     const cmdName = inputs[1] ? inputs[1].value.trim() : '';
+    const modeBtn = item.querySelector('.btn-mode-toggle-modal');
+    const cmdMode = modeBtn ? modeBtn.dataset.mode : 'terminal';
     if (cmd.length > 0) {
       commands.push(cmd);
       commandNames.push(cmdName);
+      commandModes.push(cmdMode);
     }
   });
 
@@ -476,11 +549,11 @@ async function saveProject() {
   let result;
   if (isEditMode && currentProject) {
     result = await window.electronAPI.updateProject(currentProject.id, {
-      name, path: projPath, commands, command_names: commandNames, result_path: outputPath,
+      name, path: projPath, commands, command_names: commandNames, command_modes: commandModes, result_path: outputPath,
     });
   } else {
     result = await window.electronAPI.addProject({
-      name, path: projPath, commands, command_names: commandNames, result_path: outputPath,
+      name, path: projPath, commands, command_names: commandNames, command_modes: commandModes, result_path: outputPath,
     });
   }
 
@@ -516,14 +589,34 @@ async function deleteProject() {
 }
 
 // === Execute ===
-async function executeCommand(command) {
+async function executeCommand(command, commandIndex = 0) {
   if (!currentProject || !command) return;
-  showToast(t('msg.launching'), 'info');
-  const result = await window.electronAPI.executeCommand(currentProject.path, command);
-  if (result.success) {
-    showToast(t('msg.launched'), 'success');
+  const modes = currentProject.command_modes || [];
+  const names = currentProject.command_names || [];
+  const mode = modes[commandIndex] || 'terminal';
+  const projectName = currentProject.name;
+  const commandName = names[commandIndex] || '';
+
+  if (mode === 'silent') {
+    showToast(t('msg.executingSilent'), 'info');
+    const result = await window.electronAPI.executeCommandSilent(
+      currentProject.path, command, projectName, commandName
+    );
+    if (result.success) {
+      showToast(t('msg.silentComplete', { duration: Math.round((result.durationMs || 0) / 1000) }), 'success');
+    } else {
+      showToast(t('msg.silentFailed') + ': ' + (result.error || result.status), 'error');
+    }
   } else {
-    showToast(t('msg.execFailed') + ': ' + result.error, 'error');
+    showToast(t('msg.launching'), 'info');
+    const result = await window.electronAPI.executeCommand(
+      currentProject.path, command, projectName, commandName
+    );
+    if (result.success) {
+      showToast(t('msg.launched'), 'success');
+    } else {
+      showToast(t('msg.execFailed') + ': ' + result.error, 'error');
+    }
   }
 }
 
@@ -883,4 +976,358 @@ function setupCommandInputDragDrop(input) {
       }
     }
   });
+}
+
+// === Schedule Cache ===
+async function loadScheduleCacheForProject(projectId) {
+  const result = await window.electronAPI.getSchedules();
+  if (!result.success) return;
+  const cache = {};
+  for (const s of result.data) {
+    if (s.projectId === projectId) {
+      cache[s.commandIndex] = s;
+    }
+  }
+  commandScheduleCache[projectId] = cache;
+}
+
+// === Schedule Events ===
+function setupScheduleEvents() {
+  if (window.electronAPI.onScheduleExecuted) {
+    window.electronAPI.onScheduleExecuted((data) => {
+      if (currentProject) {
+        loadScheduleCacheForProject(currentProject.id).then(() => {
+          renderCommandsDisplay();
+        });
+      }
+    });
+  }
+  if (window.electronAPI.onSilentExecutionComplete) {
+    window.electronAPI.onSilentExecutionComplete((data) => {
+      // Background notification already handled via toast in executeCommand
+    });
+  }
+}
+
+// === Schedule Dialog ===
+function simpleConfigToCron(config) {
+  if (!config) return '* * * * *';
+  switch (config.type) {
+    case 'interval':
+      return `*/${config.minutes || 5} * * * *`;
+    case 'daily':
+      return `${config.minute || 0} ${config.hour || 9} * * *`;
+    case 'weekly':
+      return `${config.minute || 0} ${config.hour || 9} * * ${config.day || 1}`;
+    default:
+      return '* * * * *';
+  }
+}
+
+function cronToSimpleConfig(cron) {
+  if (!cron) return { type: 'daily', hour: 9, minute: 0 };
+  const parts = cron.split(/\s+/);
+  if (parts.length !== 5) return null;
+  // interval: */N * * * *
+  if (parts[0].startsWith('*/') && parts[1] === '*' && parts[2] === '*' && parts[3] === '*' && parts[4] === '*') {
+    return { type: 'interval', minutes: parseInt(parts[0].slice(2)) || 5 };
+  }
+  // daily: M H * * *
+  if (parts[2] === '*' && parts[3] === '*' && parts[4] === '*' && !parts[0].includes('/') && !parts[1].includes('/')) {
+    return { type: 'daily', hour: parseInt(parts[1]) || 0, minute: parseInt(parts[0]) || 0 };
+  }
+  // weekly: M H * * D
+  if (parts[2] === '*' && parts[3] === '*' && !parts[4].includes('*') && !parts[0].includes('/')) {
+    return { type: 'weekly', hour: parseInt(parts[1]) || 0, minute: parseInt(parts[0]) || 0, day: parseInt(parts[4]) || 0 };
+  }
+  return null; // Can't map to simple
+}
+
+async function openScheduleDialog(project, commandIndex, command, commandName) {
+  // Load existing schedule
+  const result = await window.electronAPI.getScheduleForCommand(project.id, commandIndex);
+  const existing = result.success ? result.data : null;
+
+  const overlay = document.createElement('div');
+  overlay.className = 'confirm-overlay';
+
+  const simpleConfig = existing?.simpleConfig || { type: 'daily', hour: 9, minute: 0 };
+  const cronExpr = existing?.cronExpression || simpleConfigToCron(simpleConfig);
+  const isAdvanced = existing ? !existing.simpleConfig : false;
+
+  const dayNames = [
+    t('schedule.sun'), t('schedule.mon'), t('schedule.tue'),
+    t('schedule.wed'), t('schedule.thu'), t('schedule.fri'), t('schedule.sat')
+  ];
+
+  const isEnabled = existing ? existing.enabled : true;
+
+  overlay.innerHTML = `
+    <div class="modal-content" style="max-width:440px;">
+      <div class="modal-header">
+        <h3>${escapeHtml(t('schedule.title'))}</h3>
+        <button class="close-btn schedule-close-btn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" width="16" height="16"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+      </div>
+      <div class="schedule-dialog-body">
+        <div style="margin-bottom:14px;font-size:12px;color:var(--text-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
+          ${escapeHtml(commandName || command).substring(0, 100)}
+        </div>
+        ${existing ? `<div class="schedule-option-row" style="margin-bottom:14px;padding-bottom:14px;border-bottom:1px solid var(--border);">
+          <label style="font-weight:500;">${t('schedule.enableToggle')}</label>
+          <label class="toggle-switch"><input type="checkbox" id="scheduleEnabled" ${isEnabled ? 'checked' : ''}><span class="toggle-slider"></span></label>
+        </div>` : ''}
+        <div class="schedule-mode-toggle">
+          <button class="schedule-mode-btn ${!isAdvanced ? 'active' : ''}" data-mode="simple">${t('schedule.simple')}</button>
+          <button class="schedule-mode-btn ${isAdvanced ? 'active' : ''}" data-mode="advanced">${t('schedule.advanced')}</button>
+        </div>
+        <div id="scheduleSimplePanel" style="${isAdvanced ? 'display:none' : ''}">
+          <div class="schedule-simple-compact">
+            <select id="scheduleType" class="schedule-select">
+              <option value="interval" ${simpleConfig.type === 'interval' ? 'selected' : ''}>${t('schedule.everyNMin')}</option>
+              <option value="daily" ${simpleConfig.type === 'daily' ? 'selected' : ''}>${t('schedule.daily')}</option>
+              <option value="weekly" ${simpleConfig.type === 'weekly' ? 'selected' : ''}>${t('schedule.weekly')}</option>
+            </select>
+            <span id="scheduleIntervalRow" class="schedule-inline" style="${simpleConfig.type === 'interval' ? '' : 'display:none'}">
+              <input type="number" id="scheduleMinutes" min="1" max="1440" value="${simpleConfig.minutes || 5}" class="schedule-num-input"> <span class="schedule-unit">min</span>
+            </span>
+            <span id="scheduleDayRow" class="schedule-inline" style="${simpleConfig.type === 'weekly' ? '' : 'display:none'}">
+              <select id="scheduleDay" class="schedule-select">
+                ${dayNames.map((d, i) => `<option value="${i}" ${(simpleConfig.day || 0) === i ? 'selected' : ''}>${d}</option>`).join('')}
+              </select>
+            </span>
+            <span id="scheduleTimeRow" class="schedule-inline" style="${simpleConfig.type !== 'interval' ? '' : 'display:none'}">
+              <input type="number" id="scheduleHour" min="0" max="23" value="${simpleConfig.hour || 9}" class="schedule-num-input"> : <input type="number" id="scheduleMinute" min="0" max="59" value="${simpleConfig.minute || 0}" class="schedule-num-input">
+            </span>
+          </div>
+        </div>
+        <div id="scheduleAdvancedPanel" style="${isAdvanced ? '' : 'display:none'}">
+          <input type="text" id="scheduleCronInput" class="schedule-cron-input" value="${escapeHtml(cronExpr)}" placeholder="* * * * *">
+          <div class="cron-hint" id="cronHint">${t('schedule.cronHint')}</div>
+        </div>
+        <div class="schedule-options">
+          <div class="schedule-option-row">
+            <label>${t('schedule.notify')}</label>
+            <label class="toggle-switch"><input type="checkbox" id="scheduleNotify" ${existing?.notifyOnComplete !== false ? 'checked' : ''}><span class="toggle-slider"></span></label>
+          </div>
+          <div class="schedule-option-row">
+            <label>${t('schedule.timeout')}</label>
+            <div style="display:flex;align-items:center;gap:4px;"><input type="number" id="scheduleTimeout" min="1" max="1440" value="${existing?.timeoutMinutes || 60}" class="schedule-num-input" style="width:70px;"> <span class="schedule-unit">min</span></div>
+          </div>
+        </div>
+      </div>
+      <div class="schedule-footer">
+        <div>${existing ? `<button class="btn-danger schedule-remove-btn">${t('schedule.remove')}</button>` : ''}</div>
+        <div class="schedule-footer-right">
+          <button class="btn-secondary schedule-cancel-btn">${t('modal.cancel')}</button>
+          <button class="btn-primary schedule-save-btn">${t('modal.save')}</button>
+        </div>
+      </div>
+    </div>
+  `;
+
+  document.body.appendChild(overlay);
+
+  // Mode toggle
+  let currentMode = isAdvanced ? 'advanced' : 'simple';
+  overlay.querySelectorAll('.schedule-mode-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      currentMode = btn.dataset.mode;
+      overlay.querySelectorAll('.schedule-mode-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      overlay.querySelector('#scheduleSimplePanel').style.display = currentMode === 'simple' ? '' : 'none';
+      overlay.querySelector('#scheduleAdvancedPanel').style.display = currentMode === 'advanced' ? '' : 'none';
+    });
+  });
+
+  // Type change
+  const typeSelect = overlay.querySelector('#scheduleType');
+  typeSelect.addEventListener('change', () => {
+    const type = typeSelect.value;
+    overlay.querySelector('#scheduleIntervalRow').style.display = type === 'interval' ? '' : 'none';
+    overlay.querySelector('#scheduleTimeRow').style.display = type !== 'interval' ? '' : 'none';
+    overlay.querySelector('#scheduleDayRow').style.display = type === 'weekly' ? '' : 'none';
+  });
+
+  // Cron validation
+  const cronInput = overlay.querySelector('#scheduleCronInput');
+  const cronHint = overlay.querySelector('#cronHint');
+  cronInput.addEventListener('input', async () => {
+    const val = cronInput.value.trim();
+    if (!val) { cronInput.className = 'schedule-cron-input'; cronHint.textContent = t('schedule.cronHint'); return; }
+    const r = await window.electronAPI.validateCron(val);
+    if (r.valid) {
+      cronInput.className = 'schedule-cron-input cron-valid';
+      cronHint.textContent = t('schedule.cronValid');
+    } else {
+      cronInput.className = 'schedule-cron-input cron-invalid';
+      cronHint.textContent = t('schedule.cronInvalid');
+    }
+  });
+
+  const cleanup = () => overlay.remove();
+
+  // Close
+  overlay.querySelector('.schedule-close-btn').addEventListener('click', cleanup);
+  overlay.querySelector('.schedule-cancel-btn').addEventListener('click', cleanup);
+  overlay.addEventListener('click', (e) => { if (e.target === overlay) cleanup(); });
+
+  // Remove
+  const removeBtn = overlay.querySelector('.schedule-remove-btn');
+  if (removeBtn && existing) {
+    removeBtn.addEventListener('click', async () => {
+      await window.electronAPI.deleteSchedule(existing.id);
+      await loadScheduleCacheForProject(project.id);
+      renderCommandsDisplay();
+      showToast(t('schedule.removed'), 'success');
+      cleanup();
+    });
+  }
+
+  // Save
+  overlay.querySelector('.schedule-save-btn').addEventListener('click', async () => {
+    let cronExpression, sConfig;
+    if (currentMode === 'simple') {
+      const type = typeSelect.value;
+      sConfig = { type };
+      if (type === 'interval') {
+        sConfig.minutes = parseInt(overlay.querySelector('#scheduleMinutes').value) || 5;
+      } else {
+        sConfig.hour = parseInt(overlay.querySelector('#scheduleHour').value) || 0;
+        sConfig.minute = parseInt(overlay.querySelector('#scheduleMinute').value) || 0;
+        if (type === 'weekly') {
+          sConfig.day = parseInt(overlay.querySelector('#scheduleDay').value) || 0;
+        }
+      }
+      cronExpression = simpleConfigToCron(sConfig);
+    } else {
+      cronExpression = cronInput.value.trim();
+      sConfig = null;
+      const vr = await window.electronAPI.validateCron(cronExpression);
+      if (!vr.valid) {
+        showToast(t('schedule.cronInvalid'), 'error');
+        return;
+      }
+    }
+
+    const enabledToggle = overlay.querySelector('#scheduleEnabled');
+    const scheduleData = {
+      projectId: project.id,
+      commandIndex,
+      command,
+      projectPath: project.path,
+      projectName: project.name,
+      commandName: commandName || '',
+      cronExpression,
+      simpleConfig: sConfig,
+      enabled: enabledToggle ? enabledToggle.checked : true,
+      notifyOnComplete: overlay.querySelector('#scheduleNotify').checked,
+      timeoutMinutes: parseInt(overlay.querySelector('#scheduleTimeout').value) || 60,
+    };
+
+    let saveResult;
+    if (existing) {
+      saveResult = await window.electronAPI.updateSchedule(existing.id, scheduleData);
+    } else {
+      saveResult = await window.electronAPI.addSchedule(scheduleData);
+    }
+
+    if (saveResult.success) {
+      await loadScheduleCacheForProject(project.id);
+      renderCommandsDisplay();
+      showToast(t('schedule.saved'), 'success');
+      cleanup();
+    } else {
+      showToast(t('schedule.saveFailed') + ': ' + saveResult.error, 'error');
+    }
+  });
+}
+
+// === Schedule Logs Modal ===
+async function openScheduleLogsModal() {
+  const result = await window.electronAPI.getScheduleLogs({ limit: 100 });
+  const logs = result.success ? result.data.logs : [];
+
+  const overlay = document.createElement('div');
+  overlay.className = 'confirm-overlay';
+
+  const statusIcons = {
+    success: `<svg class="log-status-icon status-success" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>`,
+    failed: `<svg class="log-status-icon status-failed" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>`,
+    timeout: `<svg class="log-status-icon status-timeout" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>`,
+    error: `<svg class="log-status-icon status-error" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>`,
+  };
+
+  function formatDuration(ms) {
+    if (ms < 1000) return `${ms}ms`;
+    if (ms < 60000) return `${Math.round(ms / 1000)}s`;
+    return `${Math.round(ms / 60000)}m`;
+  }
+
+  function formatTime(iso) {
+    if (!iso) return '-';
+    const d = new Date(iso);
+    return d.toLocaleString();
+  }
+
+  let logsHtml;
+  if (logs.length === 0) {
+    logsHtml = `<div class="log-empty">${t('logs.empty')}</div>`;
+  } else {
+    logsHtml = '<div class="log-list">' + logs.map(log => `
+      <div class="log-entry" data-log-id="${log.id}">
+        <div class="log-entry-header">
+          ${statusIcons[log.status] || statusIcons.error}
+          <span class="log-project-name">${escapeHtml(log.projectName || '')}</span>
+          <span class="log-command-name">${escapeHtml(log.commandName || '')}</span>
+          ${log.trigger ? `<span class="log-trigger log-trigger-${log.trigger}">${log.trigger === 'scheduled' ? t('logs.scheduled') : t('logs.manual')}</span>` : ''}
+          <div class="log-meta">
+            <span>${formatTime(log.startTime)}</span>
+            <span>${formatDuration(log.durationMs || 0)}</span>
+          </div>
+        </div>
+        <div class="log-detail">
+          ${log.stdout ? `<div class="log-detail-label">STDOUT</div><pre>${escapeHtml(log.stdout)}</pre>` : ''}
+          ${log.stderr ? `<div class="log-detail-label">STDERR</div><pre>${escapeHtml(log.stderr)}</pre>` : ''}
+          ${!log.stdout && !log.stderr ? `<div style="font-size:12px;color:var(--text-muted)">${t('logs.noOutput')}</div>` : ''}
+        </div>
+      </div>
+    `).join('') + '</div>';
+  }
+
+  overlay.innerHTML = `
+    <div class="modal-content" style="max-width:640px;">
+      <div class="modal-header">
+        <h3>${t('logs.title')}</h3>
+        <button class="close-btn log-close-btn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" width="16" height="16"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+      </div>
+      <div class="modal-body" style="padding:16px 24px;">
+        ${logs.length > 0 ? `<div class="log-header"><span style="font-size:12px;color:var(--text-muted)">${t('logs.total', { count: logs.length })}</span><button class="btn-danger log-clear-btn" style="font-size:12px;padding:4px 10px;">${t('logs.clearAll')}</button></div>` : ''}
+        ${logsHtml}
+      </div>
+    </div>
+  `;
+
+  document.body.appendChild(overlay);
+
+  // Toggle log detail
+  overlay.querySelectorAll('.log-entry').forEach(entry => {
+    entry.addEventListener('click', () => {
+      entry.classList.toggle('expanded');
+    });
+  });
+
+  const cleanup = () => overlay.remove();
+  overlay.querySelector('.log-close-btn').addEventListener('click', cleanup);
+  overlay.addEventListener('click', (e) => { if (e.target === overlay) cleanup(); });
+  overlay.addEventListener('keydown', (e) => { if (e.key === 'Escape') cleanup(); });
+
+  // Clear all
+  const clearBtn = overlay.querySelector('.log-clear-btn');
+  if (clearBtn) {
+    clearBtn.addEventListener('click', async () => {
+      await window.electronAPI.clearScheduleLogs();
+      showToast(t('logs.cleared'), 'success');
+      cleanup();
+    });
+  }
 }
