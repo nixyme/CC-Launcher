@@ -444,6 +444,12 @@ function renderCommandsDisplay() {
   let firstVarInput = null;
   let firstVarPos = -1;
 
+  // 没有命令时隐藏整个命令区域
+  const cmdSection = display.closest('.info-item');
+  const hasCommands = commands.some(c => c && c.trim());
+  if (cmdSection) cmdSection.style.display = hasCommands ? '' : 'none';
+  if (!hasCommands) return;
+
   commands.forEach((command, index) => {
     if (!command && commands.length > 1) return;
     const wrapper = document.createElement('div');
@@ -608,13 +614,46 @@ function renderUrlBlocks() {
   label.textContent = t('url.title') || 'URLs';
   const container = document.createElement('div');
   container.className = 'url-blocks';
-  urls.forEach((u) => {
+  urls.forEach((u, index) => {
     const block = document.createElement('div');
     block.className = 'url-block';
     block.title = u.url;
+    block.draggable = true;
+    block.dataset.urlIndex = index;
     block.textContent = u.name || extractDomain(u.url);
-    block.addEventListener('click', () => {
+    block.addEventListener('click', (e) => {
+      if (block.classList.contains('url-dragging')) return;
       window.electronAPI.openUrl(u.url);
+    });
+    // Drag reorder
+    block.addEventListener('dragstart', (e) => {
+      block.classList.add('url-dragging');
+      e.dataTransfer.effectAllowed = 'move';
+      e.dataTransfer.setData('text/url-index', index.toString());
+    });
+    block.addEventListener('dragend', () => {
+      block.classList.remove('url-dragging');
+      container.querySelectorAll('.url-block').forEach(b => b.classList.remove('url-drag-over'));
+    });
+    block.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+      const dragging = container.querySelector('.url-dragging');
+      if (dragging && dragging !== block) block.classList.add('url-drag-over');
+    });
+    block.addEventListener('dragleave', () => block.classList.remove('url-drag-over'));
+    block.addEventListener('drop', (e) => {
+      e.preventDefault();
+      block.classList.remove('url-drag-over');
+      const fromIdx = parseInt(e.dataTransfer.getData('text/url-index'));
+      const toIdx = parseInt(block.dataset.urlIndex);
+      if (isNaN(fromIdx) || isNaN(toIdx) || fromIdx === toIdx) return;
+      const newUrls = [...urls];
+      const [moved] = newUrls.splice(fromIdx, 1);
+      newUrls.splice(toIdx, 0, moved);
+      currentProject.urls = newUrls;
+      window.electronAPI.updateProject(currentProject.id, { urls: newUrls });
+      renderUrlBlocks();
     });
     container.appendChild(block);
   });

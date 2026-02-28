@@ -861,6 +861,13 @@ textarea.form-input {
   background: rgba(59, 130, 246, 0.1);
   border-color: var(--accent);
 }
+.url-block.url-dragging {
+  opacity: 0.4;
+}
+.url-block.url-drag-over {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.3);
+}
 
 /* === Fast Tooltip === */
 .has-tooltip {
