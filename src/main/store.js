@@ -226,24 +226,33 @@ class ProjectStore {
 
   importData(data) {
     if (!data?.projects) throw new Error('Invalid import data: missing projects');
+    const existing = this._loadProjects();
+    const existingNames = new Set(existing.map(p => p.name));
     let imported = 0;
     let skipped = 0;
-    for (const p of data.projects) {
+    const maxOrder = existing.reduce((max, p) => Math.max(max, p.order || 0), -1);
+
+    for (let i = 0; i < data.projects.length; i++) {
+      const p = data.projects[i];
       if (!p.name) { skipped++; continue; }
-      try {
-        this.addProject({
-          name: p.name,
-          path: p.path,
-          commands: p.commands || (p.default_command ? [p.default_command] : []),
-          command_names: p.command_names || [],
-          command_modes: p.command_modes || [],
-          result_path: p.result_path,
-          urls: p.urls || [],
-          pinned: p.pinned || false,
-        });
-        imported++;
-      } catch { skipped++; }
+      if (existingNames.has(p.name)) { skipped++; continue; }
+      existing.push({
+        id: uuidv4(),
+        name: p.name,
+        path: p.path || '',
+        commands: p.commands || (p.default_command ? [p.default_command] : []),
+        command_names: p.command_names || [],
+        command_modes: p.command_modes || [],
+        default_command: p.default_command || (p.commands?.[0] || ''),
+        result_path: p.result_path || '',
+        urls: p.urls || [],
+        pinned: p.pinned || false,
+        order: p.order !== undefined ? p.order : (maxOrder + 1 + i),
+      });
+      existingNames.add(p.name);
+      imported++;
     }
+    this._saveProjects(existing);
     // Import schedules if present
     if (data.schedules && Array.isArray(data.schedules)) {
       const existing = this._loadSchedules();

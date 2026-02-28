@@ -179,7 +179,7 @@ function registerIpcHandlers(store, autoUpdater, getMainWindow, scheduler) {
             resolve({ success: false, error: 'Kaku.app not found in /Applications' });
             return;
           }
-          proc = spawn('open', ['-n', '-a', 'Kaku', '--args', 'start', '--always-new-process', '--cwd', workDir, '--', 'bash', '-c', "cd '" + workDir + "' && " + command + "; exec bash"], { detached: true });
+          proc = spawn('open', ['-n', '-a', 'Kaku', '--args', 'start', '--always-new-process', '--cwd', workDir, '--', 'zsh', '-l', '-c', "cd '" + workDir.replace(/'/g, "'\\''") + "' && " + command + "; exec zsh"], { detached: true });
           proc.unref();
         } else {
           const safePath = workDir.replace(/'/g, "'\\'");

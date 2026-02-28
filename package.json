@@ -1,6 +1,6 @@
 {
   "name": "cc-launcher",
-  "version": "1.1.1",
+  "version": "1.1.2",
   "description": "CC-Launcher - Manage and launch Claude Code projects",
   "main": "src/main/index.js",
   "scripts": {

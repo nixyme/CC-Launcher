@@ -40,7 +40,22 @@ document.addEventListener('DOMContentLoaded', async () => {
   setupSettings();
   setupAutoUpdater();
   setupScheduleEvents();
+  updateGlobalShortcutHint();
 });
+
+// === Global Shortcut Hint ===
+async function updateGlobalShortcutHint() {
+  const shortcut = await window.electronAPI.getGlobalShortcut();
+  const el = document.getElementById('globalShortcutHint');
+  if (!shortcut) { el.style.display = 'none'; return; }
+  // 将 Electron accelerator 转为 kbd 显示（如 "CommandOrControl+Shift+L"）
+  const parts = shortcut.replace(/CommandOrControl/g, '⌘').replace(/Command/g, '⌘')
+    .replace(/Control/g, '⌃').replace(/Alt/g, '⌥').replace(/Shift/g, '⇧')
+    .replace(/Meta/g, '⌘').split('+');
+  const kbds = parts.map(k => `<kbd>${k.trim()}</kbd>`).join(' + ');
+  el.innerHTML = kbds + ' <span>' + (t('welcome.activate') || 'to activate window') + '</span>';
+  el.style.display = '';
+}
 
 // === Event Listeners ===
 function setupEventListeners() {
@@ -1087,6 +1102,7 @@ function setupSettings() {
     if (result.success) {
       shortcutInput.value = accelerator;
       showToast(t('settings.shortcutSet'), 'success');
+      updateGlobalShortcutHint();
     } else if (result.error === 'conflict') {
       showToast(t('settings.shortcutConflict'), 'error');
       const s = await window.electronAPI.getGlobalShortcut();
@@ -1102,6 +1118,7 @@ function setupSettings() {
     await window.electronAPI.setGlobalShortcut('');
     document.getElementById('shortcutInput').value = '';
     showToast(t('settings.shortcutCleared'), 'success');
+    updateGlobalShortcutHint();
   });
 
   // Import / Export (now in settings)
