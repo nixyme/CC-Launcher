@@ -1142,9 +1142,17 @@ function setupSettings() {
     btn.disabled = true;
     btn.textContent = t('settings.checking');
     statusEl.textContent = t('settings.checking');
-    await window.electronAPI.checkForUpdate();
-    // Result comes via events
-    setTimeout(() => { btn.disabled = false; btn.textContent = t('settings.checkUpdate'); }, 5000);
+    const result = await window.electronAPI.checkForUpdate();
+    if (!result.success) {
+      if (result.error === 'dev_mode') {
+        statusEl.textContent = t('settings.devModeNoUpdate');
+      } else {
+        statusEl.textContent = t('settings.updateError') + ': ' + result.error;
+      }
+      btn.disabled = false;
+      btn.textContent = t('settings.checkUpdate');
+    }
+    // Success result comes via events
   });
 }
 
@@ -1155,14 +1163,10 @@ function setupAutoUpdater() {
   window.electronAPI.onUpdateAvailable((info) => {
     const statusEl = document.getElementById('updateStatus');
     const btn = document.getElementById('checkUpdateBtn');
-    statusEl.textContent = t('settings.newVersion', { version: info.version });
-    btn.textContent = t('settings.download');
-    btn.disabled = false;
-    btn.onclick = async () => {
-      btn.disabled = true;
-      btn.textContent = t('settings.downloading');
-      await window.electronAPI.downloadUpdate();
-    };
+    // autoDownload=true，自动下载中，无需手动点击
+    statusEl.textContent = t('settings.downloading') + ' v' + info.version + '...';
+    btn.disabled = true;
+    btn.textContent = t('settings.downloading');
   });
 
   window.electronAPI.onUpdateNotAvailable(() => {
@@ -1176,10 +1180,11 @@ function setupAutoUpdater() {
     document.getElementById('updateStatus').textContent = t('settings.downloadProgress', { percent: progress.percent });
   });
 
-  window.electronAPI.onUpdateDownloaded(() => {
+  window.electronAPI.onUpdateDownloaded((info) => {
     const statusEl = document.getElementById('updateStatus');
     const btn = document.getElementById('checkUpdateBtn');
-    statusEl.textContent = t('settings.readyToInstall');
+    const ver = info && info.version ? ' v' + info.version : '';
+    statusEl.textContent = t('settings.readyToInstall') + ver;
     btn.textContent = t('settings.installRestart');
     btn.disabled = false;
     btn.onclick = () => {
@@ -1188,7 +1193,7 @@ function setupAutoUpdater() {
   });
 
   window.electronAPI.onUpdateError((msg) => {
-    document.getElementById('updateStatus').textContent = t('settings.updateError');
+    document.getElementById('updateStatus').textContent = t('settings.updateError') + ': ' + msg;
     const btn = document.getElementById('checkUpdateBtn');
     btn.textContent = t('settings.checkUpdate');
     btn.disabled = false;

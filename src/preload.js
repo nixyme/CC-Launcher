@@ -72,7 +72,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   onUpdateAvailable: (cb) => ipcRenderer.on('update-available', (_e, info) => cb(info)),
   onUpdateNotAvailable: (cb) => ipcRenderer.on('update-not-available', () => cb()),
   onUpdateDownloadProgress: (cb) => ipcRenderer.on('update-download-progress', (_e, p) => cb(p)),
-  onUpdateDownloaded: (cb) => ipcRenderer.on('update-downloaded', () => cb()),
+  onUpdateDownloaded: (cb) => ipcRenderer.on('update-downloaded', (_e, info) => cb(info)),
   onUpdateError: (cb) => ipcRenderer.on('update-error', (_e, msg) => cb(msg)),
 
   // 定时任务

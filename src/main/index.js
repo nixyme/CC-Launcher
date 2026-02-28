@@ -43,13 +43,24 @@ function createWindow() {
 
 // === Auto Updater ===
 function setupAutoUpdater() {
-  if (isDev) return; // 开发模式不检查更新
+  if (isDev) {
+    console.log('[AutoUpdater] Skipped in dev mode');
+    return null;
+  }
 
   const { autoUpdater } = require('electron-updater');
-  autoUpdater.autoDownload = false;
-  autoUpdater.autoInstallOnAppQuit = false;
+  autoUpdater.autoDownload = true;           // 检测到更新后自动下载
+  autoUpdater.autoInstallOnAppQuit = false;  // 不自动安装，等用户确认
+
+  autoUpdater.on('checking-for-update', () => {
+    console.log('[AutoUpdater] Checking for update...');
+    if (mainWindow) {
+      mainWindow.webContents.send('update-checking');
+    }
+  });
 
   autoUpdater.on('update-available', (info) => {
+    console.log('[AutoUpdater] Update available:', info.version);
     if (mainWindow) {
       mainWindow.webContents.send('update-available', {
         version: info.version,
@@ -59,6 +70,7 @@ function setupAutoUpdater() {
   });
 
   autoUpdater.on('update-not-available', () => {
+    console.log('[AutoUpdater] Already up to date');
     if (mainWindow) {
       mainWindow.webContents.send('update-not-available');
     }
@@ -72,13 +84,17 @@ function setupAutoUpdater() {
     }
   });
 
-  autoUpdater.on('update-downloaded', () => {
+  autoUpdater.on('update-downloaded', (info) => {
+    console.log('[AutoUpdater] Update downloaded:', info.version);
     if (mainWindow) {
-      mainWindow.webContents.send('update-downloaded');
+      mainWindow.webContents.send('update-downloaded', {
+        version: info.version,
+      });
     }
   });
 
   autoUpdater.on('error', (err) => {
+    console.error('[AutoUpdater] Error:', err.message);
     if (mainWindow) {
       mainWindow.webContents.send('update-error', err.message);
     }
@@ -127,6 +143,15 @@ app.whenReady().then(() => {
 
   // 直接创建窗口
   mainWindow = createWindow();
+
+  // 启动后延迟 3 秒自动检查更新
+  if (autoUpdater) {
+    setTimeout(() => {
+      autoUpdater.checkForUpdates().catch((err) => {
+        console.error('[AutoUpdater] Auto-check failed:', err.message);
+      });
+    }, 3000);
+  }
 
   // 恢复全局快捷键
   const savedShortcut = store.getSetting('globalShortcut');

@@ -562,17 +562,17 @@ end tell`;
 
   // --- Auto Update ---
   ipcMain.handle('check-for-update', async () => {
-    if (!autoUpdater) return { success: false, error: 'Updater not available in dev mode' };
+    if (!autoUpdater) return { success: false, error: 'dev_mode' };
     try {
-      await autoUpdater.checkForUpdates();
-      return { success: true };
+      const result = await autoUpdater.checkForUpdates();
+      return { success: true, data: result };
     } catch (e) {
       return { success: false, error: e.message };
     }
   });
 
   ipcMain.handle('download-update', async () => {
-    if (!autoUpdater) return { success: false, error: 'Updater not available' };
+    if (!autoUpdater) return { success: false, error: 'dev_mode' };
     try {
       await autoUpdater.downloadUpdate();
       return { success: true };
@@ -582,7 +582,7 @@ end tell`;
   });
 
   ipcMain.handle('install-update', () => {
-    if (!autoUpdater) return { success: false, error: 'Updater not available' };
+    if (!autoUpdater) return { success: false, error: 'dev_mode' };
     autoUpdater.quitAndInstall(false, true);
     return { success: true };
   });
