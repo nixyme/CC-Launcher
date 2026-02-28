@@ -22,10 +22,16 @@ contextBridge.exposeInMainWorld('electronAPI', {
   openFolder: (folderPath) => ipcRenderer.invoke('open-folder', folderPath),
   selectFolder: () => ipcRenderer.invoke('select-folder'),
   selectFile: (defaultPath) => ipcRenderer.invoke('select-file', defaultPath),
+  checkPathType: (filePath) => ipcRenderer.invoke('check-path-type', filePath),
 
   // 文件对话框
   saveFile: (data, defaultName) => ipcRenderer.invoke('save-file', { data, defaultName }),
+  quickSaveFile: (data) => ipcRenderer.invoke('quick-save-file', data),
   openFile: () => ipcRenderer.invoke('open-file'),
+
+  // 窗口控制
+  hideWindow: () => ipcRenderer.invoke('hide-window'),
+  minimizeWindow: () => ipcRenderer.invoke('minimize-window'),
 
   // 语言设置
   getLocale: () => ipcRenderer.invoke('get-locale'),

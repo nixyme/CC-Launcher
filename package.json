@@ -1,6 +1,6 @@
 {
   "name": "cc-launcher",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "CC 万能启动器 - 管理和启动 Claude Code 项目",
   "main": "src/main/index.js",
   "scripts": {

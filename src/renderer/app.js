@@ -46,18 +46,33 @@ function setupEventListeners() {
     addBtn.classList.add('drag-active');
   });
   addBtn.addEventListener('dragleave', () => addBtn.classList.remove('drag-active'));
-  addBtn.addEventListener('drop', (e) => {
+  addBtn.addEventListener('drop', async (e) => {
     e.preventDefault();
     addBtn.classList.remove('drag-active');
     const files = e.dataTransfer.files;
     if (files.length > 0) {
       const filePath = files[0].path;
-      if (filePath) {
+      if (!filePath) return;
+      const pathInfo = await window.electronAPI.checkPathType(filePath);
+      if (!pathInfo.exists) return;
+
+      if (pathInfo.isDirectory) {
+        // 文件夹 → 填入项目路径
         openModal(false);
         setTimeout(() => {
           document.getElementById('modalProjectPath').value = filePath;
           const dirName = filePath.split('/').pop() || filePath;
           document.getElementById('modalProjectName').value = dirName;
+        }, 50);
+      } else if (pathInfo.isFile) {
+        // 文件 → 作为可执行命令添加
+        const dirPath = filePath.substring(0, filePath.lastIndexOf('/'));
+        const fileName = filePath.split('/').pop() || filePath;
+        openModal(false);
+        setTimeout(() => {
+          document.getElementById('modalProjectPath').value = dirPath;
+          document.getElementById('modalProjectName').value = fileName;
+          renderCommandInputs([filePath], ['']);
         }, 50);
       }
     }
@@ -101,6 +116,26 @@ function setupKeyboardShortcuts() {
     if (e.key === 'Escape') {
       if (settingsModal.classList.contains('show')) closeSettings();
       else if (projectModal.classList.contains('show')) closeModal();
+    }
+    // Enter: Save in project modal
+    if (e.key === 'Enter' && projectModal.classList.contains('show')) {
+      e.preventDefault();
+      saveProject();
+    }
+    // Cmd/Ctrl + S: Quick export settings
+    if ((e.metaKey || e.ctrlKey) && e.key === 's') {
+      e.preventDefault();
+      quickExportSettings();
+    }
+    // Cmd/Ctrl + H: Hide window
+    if ((e.metaKey || e.ctrlKey) && e.key === 'h') {
+      e.preventDefault();
+      window.electronAPI.hideWindow();
+    }
+    // Cmd/Ctrl + M: Minimize window
+    if ((e.metaKey || e.ctrlKey) && e.key === 'm') {
+      e.preventDefault();
+      window.electronAPI.minimizeWindow();
     }
     // Cmd/Ctrl + F: Focus search
     if ((e.metaKey || e.ctrlKey) && e.key === 'f') {
@@ -498,6 +533,20 @@ async function openOutputFolder() {
 }
 
 // === Import / Export ===
+async function quickExportSettings() {
+  const result = await window.electronAPI.exportProjects();
+  if (!result.success) { showToast(t('msg.exportFailed') + ': ' + result.error, 'error'); return; }
+  const jsonStr = JSON.stringify(result.data, null, 2);
+  const quickResult = await window.electronAPI.quickSaveFile(jsonStr);
+  if (quickResult.success) {
+    showToast(t('msg.exported'), 'success');
+  } else {
+    // 没有上次路径或写入失败，走弹窗流程
+    const saveResult = await window.electronAPI.saveFile(jsonStr, 'cc-launcher-settings.json');
+    if (!saveResult.canceled) showToast(t('msg.exported'), 'success');
+  }
+}
+
 async function exportSettings() {
   const result = await window.electronAPI.exportProjects();
   if (!result.success) { showToast(t('msg.exportFailed') + ': ' + result.error, 'error'); return; }
@@ -557,6 +606,10 @@ function showConfirm(title, message) {
     overlay.querySelector('.confirm-cancel').addEventListener('click', () => cleanup(false));
     overlay.querySelector('.confirm-ok').addEventListener('click', () => cleanup(true));
     overlay.addEventListener('click', (e) => { if (e.target === overlay) cleanup(false); });
+    overlay.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') { e.preventDefault(); cleanup(true); }
+      if (e.key === 'Escape') { e.preventDefault(); cleanup(false); }
+    });
     // Focus the cancel button for safety
     setTimeout(() => overlay.querySelector('.confirm-cancel').focus(), 50);
   });

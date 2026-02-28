@@ -189,6 +189,17 @@ end tell`;
     });
   });
 
+  // --- 路径类型检测 ---
+  ipcMain.handle('check-path-type', (_event, filePath) => {
+    try {
+      if (!fs.existsSync(filePath)) return { exists: false };
+      const stat = fs.statSync(filePath);
+      return { exists: true, isDirectory: stat.isDirectory(), isFile: stat.isFile() };
+    } catch (e) {
+      return { exists: false, error: e.message };
+    }
+  });
+
   // --- 文件夹操作 ---
   ipcMain.handle('open-folder', async (_event, folderPath) => {
     if (!fs.existsSync(folderPath)) {
@@ -222,14 +233,44 @@ end tell`;
 
   ipcMain.handle('save-file', async (_event, { data, defaultName }) => {
     const win = BrowserWindow.getFocusedWindow();
+    const lastPath = store.getSetting('lastExportPath');
     const result = await dialog.showSaveDialog(win, {
       title: 'Export Settings',
-      defaultPath: defaultName || 'cc-launcher-settings.json',
+      defaultPath: lastPath || defaultName || 'cc-launcher-settings.json',
       filters: [{ name: 'JSON Files', extensions: ['json'] }],
     });
     if (result.canceled) return { canceled: true };
     fs.writeFileSync(result.filePath, data, 'utf-8');
+    store.setSetting('lastExportPath', result.filePath);
     return { canceled: false, path: result.filePath };
+  });
+
+  // 快速保存：直接写入上次导出路径，无路径则返回需要弹窗
+  ipcMain.handle('quick-save-file', async (_event, data) => {
+    const lastPath = store.getSetting('lastExportPath');
+    if (!lastPath) return { needsDialog: true };
+    try {
+      fs.writeFileSync(lastPath, data, 'utf-8');
+      return { success: true, path: lastPath };
+    } catch (e) {
+      return { needsDialog: true, error: e.message };
+    }
+  });
+
+  // --- 窗口控制 ---
+  ipcMain.handle('hide-window', () => {
+    const win = BrowserWindow.getFocusedWindow();
+    if (win) {
+      if (process.platform === 'darwin') app.hide();
+      else win.hide();
+    }
+    return { success: true };
+  });
+
+  ipcMain.handle('minimize-window', () => {
+    const win = BrowserWindow.getFocusedWindow();
+    if (win) win.minimize();
+    return { success: true };
   });
 
   ipcMain.handle('open-file', async () => {
