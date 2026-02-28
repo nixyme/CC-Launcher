@@ -622,19 +622,73 @@ end tell`;
     });
   });
 
-  // 打开下载页面（浏览器下载 DMG）
+  // 直接下载 DMG 到临时目录，通过事件报告进度
   ipcMain.handle('download-update', async (_event, url) => {
+    const https = require('https');
+    const http = require('http');
+    const os = require('os');
+    const tmpDir = path.join(os.tmpdir(), 'cc-launcher-update');
+    if (!fs.existsSync(tmpDir)) fs.mkdirSync(tmpDir, { recursive: true });
+    const fileName = url.split('/').pop() || 'CC-Launcher-update.dmg';
+    const filePath = path.join(tmpDir, fileName);
+    const win = getMainWindow();
+
+    return new Promise((resolve) => {
+      const doDownload = (downloadUrl, redirectCount) => {
+        if (redirectCount > 5) {
+          resolve({ success: false, error: 'Too many redirects' });
+          return;
+        }
+        const mod = downloadUrl.startsWith('https') ? https : http;
+        mod.get(downloadUrl, { headers: { 'User-Agent': 'CC-Launcher/' + app.getVersion() } }, (res) => {
+          // 跟随重定向
+          if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
+            doDownload(res.headers.location, redirectCount + 1);
+            return;
+          }
+          if (res.statusCode !== 200) {
+            resolve({ success: false, error: `HTTP ${res.statusCode}` });
+            return;
+          }
+          const totalBytes = parseInt(res.headers['content-length'] || '0', 10);
+          let downloaded = 0;
+          const file = fs.createWriteStream(filePath);
+          res.on('data', (chunk) => {
+            downloaded += chunk.length;
+            file.write(chunk);
+            if (win && !win.isDestroyed() && totalBytes > 0) {
+              const percent = Math.round((downloaded / totalBytes) * 100);
+              win.webContents.send('update-download-progress', { percent, downloaded, total: totalBytes });
+            }
+          });
+          res.on('end', () => {
+            file.end();
+            resolve({ success: true, filePath });
+          });
+          res.on('error', (e) => {
+            file.end();
+            resolve({ success: false, error: e.message });
+          });
+        }).on('error', (e) => {
+          resolve({ success: false, error: e.message });
+        });
+      };
+      doDownload(url, 0);
+    });
+  });
+
+  // 打开已下载的 DMG 并退出应用
+  ipcMain.handle('install-update', async (_event, filePath) => {
     try {
-      await shell.openExternal(url);
+      if (!filePath || !fs.existsSync(filePath)) {
+        return { success: false, error: 'DMG file not found' };
+      }
+      spawn('open', [filePath], { detached: true });
+      setTimeout(() => app.quit(), 1500);
       return { success: true };
     } catch (e) {
       return { success: false, error: e.message };
     }
-  });
-
-  // install-update 不再需要，保留空实现兼容前端
-  ipcMain.handle('install-update', () => {
-    return { success: false, error: 'Manual install required' };
   });
 
   // --- Schedule CRUD ---

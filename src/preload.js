@@ -68,6 +68,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // 自动更新（GitHub API 方式）
   checkForUpdate: () => ipcRenderer.invoke('check-for-update'),
   downloadUpdate: (url) => ipcRenderer.invoke('download-update', url),
+  installUpdate: (filePath) => ipcRenderer.invoke('install-update', filePath),
+  onUpdateDownloadProgress: (cb) => ipcRenderer.on('update-download-progress', (_e, data) => cb(data)),
 
   // 定时任务
   getSchedules: () => ipcRenderer.invoke('get-schedules'),

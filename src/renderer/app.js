@@ -1172,11 +1172,28 @@ function setupSettings() {
       btn.textContent = t('settings.download');
       btn.disabled = false;
       btn.onclick = async () => {
-        await window.electronAPI.downloadUpdate(info.downloadUrl);
-        statusEl.textContent = t('settings.downloadStarted');
-        btn.textContent = t('settings.checkUpdate');
-        btn.disabled = false;
-        btn.onclick = null;
+        btn.disabled = true;
+        btn.textContent = '0%';
+        statusEl.textContent = t('settings.downloading') || 'Downloading...';
+        // 监听下载进度
+        window.electronAPI.onUpdateDownloadProgress(({ percent }) => {
+          btn.textContent = percent + '%';
+        });
+        const dlResult = await window.electronAPI.downloadUpdate(info.downloadUrl);
+        if (dlResult.success) {
+          statusEl.textContent = t('settings.downloadComplete') || 'Download complete';
+          btn.textContent = t('settings.installRestart') || 'Install & Restart';
+          btn.disabled = false;
+          btn.onclick = async () => {
+            btn.disabled = true;
+            await window.electronAPI.installUpdate(dlResult.filePath);
+          };
+        } else {
+          statusEl.textContent = (t('settings.updateError') || 'Error') + ': ' + dlResult.error;
+          btn.textContent = t('settings.checkUpdate');
+          btn.disabled = false;
+          btn.onclick = null;
+        }
       };
     } else {
       statusEl.textContent = t('settings.upToDate');
