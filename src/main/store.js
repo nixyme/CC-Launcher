@@ -19,8 +19,47 @@ class ProjectStore {
       fs.mkdirSync(this.dataDir, { recursive: true });
     }
     if (!fs.existsSync(this.dataFile)) {
-      this._saveProjects([]);
+      this._writeSampleData();
     }
+  }
+
+  _writeSampleData() {
+    const projectId = uuidv4();
+    const sampleProject = {
+      id: projectId,
+      name: "示例：尼克西的CC",
+      path: '',
+      commands: ['claude --dangerously-skip-permissions', 'claude update'],
+      command_names: ['启动', '升级'],
+      command_modes: ['terminal', 'silent'],
+      default_command: 'claude --dangerously-skip-permissions',
+      result_path: '',
+      urls: [
+        { url: 'https://github.com/nixyme/CC-Launcher', name: 'Launcher' },
+        { url: 'https://github.com/farion1231/cc-switch', name: 'cc-switch' },
+      ],
+      pinned: false,
+      order: 0,
+    };
+    this._saveProjects([sampleProject]);
+
+    const sampleSchedule = {
+      id: uuidv4(),
+      projectId,
+      commandIndex: 1,
+      command: 'claude update',
+      projectPath: '',
+      projectName: sampleProject.name,
+      commandName: '升级',
+      cronExpression: '0 9 * * *',
+      simpleConfig: { type: 'daily', hour: 9, minute: 0 },
+      enabled: false,
+      notifyOnComplete: true,
+      timeoutMinutes: 60,
+      lastRunAt: null,
+      lastExitCode: null,
+    };
+    this._saveSchedules([sampleSchedule]);
   }
 
   _loadProjects() {
@@ -61,7 +100,13 @@ class ProjectStore {
           : [];
       }
     }
-    projects.sort((a, b) => (a.order || 0) - (b.order || 0));
+    projects.sort((a, b) => {
+      // pinned 优先
+      const pa = a.pinned ? 1 : 0;
+      const pb = b.pinned ? 1 : 0;
+      if (pa !== pb) return pb - pa;
+      return (a.order || 0) - (b.order || 0);
+    });
     return projects;
   }
 
@@ -69,25 +114,24 @@ class ProjectStore {
     return this._loadProjects().find((p) => p.id === id) || null;
   }
 
-  addProject({ name, path: projPath, commands, command_names, command_modes, result_path }) {
+  addProject({ name, path: projPath, commands, command_names, command_modes, result_path, urls, pinned }) {
     const projects = this._loadProjects();
     if (projects.some((p) => p.name === name)) {
       throw new Error(`Project name '${name}' already exists`);
-    }
-    if (!fs.existsSync(projPath)) {
-      throw new Error(`Project path does not exist: ${projPath}`);
     }
     // 新项目置顶：所有现有项目 order+1，新项目 order=0
     projects.forEach((p) => { p.order = (p.order || 0) + 1; });
     const project = {
       id: uuidv4(),
       name,
-      path: projPath,
+      path: projPath || '',
       commands: commands || [],
       command_names: command_names || [],
       command_modes: command_modes || [],
       default_command: commands?.[0] || '',
       result_path: result_path || '',
+      urls: urls || [],
+      pinned: pinned || false,
       order: 0,
     };
     projects.unshift(project);
@@ -108,9 +152,6 @@ class ProjectStore {
       project.name = updates.name;
     }
     if (updates.path !== undefined) {
-      if (!fs.existsSync(updates.path)) {
-        throw new Error(`Project path does not exist: ${updates.path}`);
-      }
       project.path = updates.path;
     }
     if (updates.commands !== undefined) {
@@ -126,8 +167,23 @@ class ProjectStore {
     if (updates.result_path !== undefined) {
       project.result_path = updates.result_path;
     }
+    if (updates.urls !== undefined) {
+      project.urls = updates.urls;
+    }
+    if (updates.pinned !== undefined) {
+      project.pinned = updates.pinned;
+    }
 
     projects[idx] = project;
+    this._saveProjects(projects);
+    return project;
+  }
+
+  togglePin(id) {
+    const projects = this._loadProjects();
+    const project = projects.find((p) => p.id === id);
+    if (!project) throw new Error(`Project not found: ${id}`);
+    project.pinned = !project.pinned;
     this._saveProjects(projects);
     return project;
   }
@@ -173,7 +229,7 @@ class ProjectStore {
     let imported = 0;
     let skipped = 0;
     for (const p of data.projects) {
-      if (!p.name || !p.path) { skipped++; continue; }
+      if (!p.name) { skipped++; continue; }
       try {
         this.addProject({
           name: p.name,
@@ -182,6 +238,8 @@ class ProjectStore {
           command_names: p.command_names || [],
           command_modes: p.command_modes || [],
           result_path: p.result_path,
+          urls: p.urls || [],
+          pinned: p.pinned || false,
         });
         imported++;
       } catch { skipped++; }
@@ -340,6 +398,14 @@ class ProjectStore {
 
   clearAllScheduleLogs() {
     this._saveScheduleLogs([]);
+  }
+
+  resetData() {
+    const files = [this.dataFile, this.backupFile, this.settingsFile, this.schedulesFile, this.scheduleLogsFile];
+    for (const f of files) {
+      try { if (fs.existsSync(f)) fs.unlinkSync(f); } catch { /* ignore */ }
+    }
+    this._writeSampleData();
   }
 }
 

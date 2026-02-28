@@ -1,6 +1,7 @@
 const cron = require('node-cron');
 const { spawn } = require('child_process');
-const { Notification } = require('electron');
+const { Notification, app } = require('electron');
+const fs = require('fs');
 
 const MAX_STDOUT = 10 * 1024; // 10KB
 
@@ -119,7 +120,12 @@ class Scheduler {
     let stdout = '';
     let stderr = '';
 
-    const proc = spawn('bash', ['-c', `cd '${current.projectPath.replace(/'/g, "'\\''")}' && ${current.command}`], {
+    // 空路径回退到桌面
+    const workDir = (current.projectPath && fs.existsSync(current.projectPath))
+      ? current.projectPath
+      : app.getPath('desktop');
+
+    const proc = spawn('bash', ['-c', `cd '${workDir.replace(/'/g, "'\\''")}' && ${current.command}`], {
       detached: false,
       stdio: ['ignore', 'pipe', 'pipe'],
       env: { ...process.env, ELECTRON_RUN_AS_NODE: undefined },

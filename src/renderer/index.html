@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self'; img-src 'self' data:">
-    <title>CC Launcher</title>
+    <title>CC-Launcher</title>
     <link rel="stylesheet" href="styles.css">
 </head>
 <body>
@@ -30,6 +30,7 @@
                 <div class="search-container">
                     <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
                     <input type="text" id="searchInput" class="search-input" data-i18n-placeholder="sidebar.search" placeholder="Search projects...">
+                    <div id="searchHistoryDropdown" class="search-history-dropdown" style="display:none;"></div>
                 </div>
             </div>
             <div class="project-list" id="projectList"></div>
@@ -62,6 +63,7 @@
         <div class="form-group"><label data-i18n="modal.projectName">Project Name</label><input type="text" id="modalProjectName" class="form-input" data-i18n-placeholder="modal.projectNamePlaceholder" placeholder="My Project"></div>
         <div class="form-group"><label data-i18n="modal.projectPath">Project Path</label><div class="input-with-button"><input type="text" id="modalProjectPath" class="form-input" data-i18n-placeholder="modal.selectProjectFolder" placeholder="Select project folder" readonly><button id="browseProjectPathBtn" class="btn-browse"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="14" height="14"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg><span data-i18n="modal.browse">Browse</span></button></div></div>
         <div class="form-group"><label data-i18n="modal.commands">Commands</label><div id="commandsList" class="commands-list"></div><button type="button" id="addCommandBtn" class="btn-add-command" data-i18n="modal.addCommand">+ Add Command</button></div>
+        <div class="form-group"><label data-i18n="url.title">URLs</label><div id="urlsList" class="commands-list"></div><button type="button" id="addUrlBtn" class="btn-add-command" data-i18n="url.add">+ Add URL</button></div>
         <div class="form-group"><label data-i18n="modal.outputPath">Output Path</label><div class="input-with-button"><input type="text" id="modalOutputPath" class="form-input" data-i18n-placeholder="modal.selectOutputFolder" placeholder="Select output folder (optional)" readonly><button id="browseOutputPathBtn" class="btn-browse"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="14" height="14"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg><span data-i18n="modal.browse">Browse</span></button></div></div>
     </div>
     <div class="modal-footer"><button id="cancelModalBtn" class="btn-secondary" data-i18n="modal.cancel">Cancel</button><button id="saveProjectBtn" class="btn-primary" data-i18n="modal.save">Save</button></div>
@@ -73,7 +75,7 @@
         <div class="settings-group"><div class="settings-item"><div class="settings-item-info"><label data-i18n="settings.shortcut">Global shortcut</label><span class="settings-desc" data-i18n="settings.shortcutDesc">Activate window from anywhere</span></div><div class="shortcut-input-wrap"><input type="text" id="shortcutInput" class="settings-select shortcut-input" readonly placeholder="Click to set"><button id="clearShortcutBtn" class="btn-icon-sm" title="Clear">✕</button></div></div></div>
         <div class="settings-group"><div class="settings-item"><div class="settings-item-info"><label data-i18n="settings.autoLaunch">Launch at startup</label><span class="settings-desc" data-i18n="settings.autoLaunchDesc">Automatically start when you log in</span></div><label class="toggle-switch"><input type="checkbox" id="autoLaunchToggle"><span class="toggle-slider"></span></label></div></div>
         <div class="settings-group"><div class="settings-item"><div class="settings-item-info"><label data-i18n="settings.update">Software update</label><span class="settings-desc" id="updateStatus" data-i18n="settings.upToDate">You're up to date</span></div><button id="checkUpdateBtn" class="btn-secondary" data-i18n="settings.checkUpdate">Check</button></div></div>
-        <div class="settings-group"><div class="settings-item"><div class="settings-item-info"><label data-i18n="settings.data">Data</label><span class="settings-desc" data-i18n="settings.dataDesc">Import or export project data</span></div><div class="settings-actions"><button id="importBtn" class="btn-secondary" data-i18n="settings.import">Import</button><button id="exportBtn" class="btn-secondary" data-i18n="settings.export">Export</button></div></div></div>
+        <div class="settings-group"><div class="settings-item"><div class="settings-item-info"><label data-i18n="settings.data">Data</label><span class="settings-desc" data-i18n="settings.dataDesc">Import or export project data</span></div><div class="settings-actions"><button id="importBtn" class="btn-secondary" data-i18n="settings.import">Import</button><button id="exportBtn" class="btn-secondary" data-i18n="settings.export">Export</button><button id="openDataDirBtn" class="btn-icon-sm" data-i18n-title="settings.openDataDir" title="Open data folder"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="14" height="14"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg></button><button id="resetDataBtn" class="btn-icon-sm btn-icon-danger" data-i18n-title="settings.resetData" title="Reset all data"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="14" height="14"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg></button></div></div></div>
         <div class="settings-group"><div class="settings-item"><div class="settings-item-info"><label data-i18n="settings.version">Version</label><span class="settings-desc" id="appVersion">-</span></div></div></div>
     </div>
     </div></div>

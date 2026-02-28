@@ -7,6 +7,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   updateProject: (id, updates) => ipcRenderer.invoke('update-project', { id, updates }),
   deleteProject: (id) => ipcRenderer.invoke('delete-project', id),
   reorderProjects: (ids) => ipcRenderer.invoke('reorder-projects', ids),
+  togglePin: (id) => ipcRenderer.invoke('toggle-pin', id),
   updateCommand: (projectId, index, command) =>
     ipcRenderer.invoke('update-command', { projectId, index, command }),
 
@@ -19,6 +20,18 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke('execute-command', { projectPath, command, projectName, commandName }),
   executeCommandSilent: (projectPath, command, projectName, commandName) =>
     ipcRenderer.invoke('execute-command-silent', { projectPath, command, projectName, commandName }),
+
+  // 打开配置目录
+  openDataDir: () => ipcRenderer.invoke('open-data-dir'),
+  // 重置数据
+  resetData: () => ipcRenderer.invoke('reset-data'),
+
+  // 搜索历史
+  getSearchHistory: () => ipcRenderer.invoke('get-search-history'),
+  saveSearchHistory: (history) => ipcRenderer.invoke('save-search-history', history),
+
+  // 打开网址
+  openUrl: (url) => ipcRenderer.invoke('open-url', url),
 
   // 文件夹操作
   openFolder: (folderPath) => ipcRenderer.invoke('open-folder', folderPath),

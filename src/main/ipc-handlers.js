@@ -8,7 +8,13 @@ function escapeShellArg(str) {
   return str.replace(/(["\\s'$`\\\\!#&|;(){}])/g, '\\$1');
 }
 
-// 校验路径是否为已注册项目
+// 解析工作目录：空路径回退到桌面
+function resolveWorkDir(projectPath) {
+  if (projectPath && fs.existsSync(projectPath)) return projectPath;
+  return app.getPath('desktop');
+}
+
+// 校验路径是否为已注册项目（空路径也视为合法）
 function isRegisteredProject(store, projectPath) {
   const projects = store.getAllProjects();
   return projects.some((p) => p.path === projectPath);
@@ -101,6 +107,15 @@ function registerIpcHandlers(store, autoUpdater, getMainWindow, scheduler) {
     }
   });
 
+  ipcMain.handle('toggle-pin', (_event, id) => {
+    try {
+      const result = store.togglePin(id);
+      return { success: true, data: result };
+    } catch (e) {
+      return { success: false, error: e.message };
+    }
+  });
+
   ipcMain.handle('update-command', (_event, { projectId, index, command }) => {
     try {
       const result = store.updateCommandAtIndex(projectId, index, command);
@@ -135,10 +150,7 @@ function registerIpcHandlers(store, autoUpdater, getMainWindow, scheduler) {
         resolve({ success: false, error: 'Unregistered project path' });
         return;
       }
-      if (!fs.existsSync(projectPath)) {
-        resolve({ success: false, error: 'Project path does not exist' });
-        return;
-      }
+      const workDir = resolveWorkDir(projectPath);
 
       const startTime = new Date().toISOString();
       const platform = process.platform;
@@ -146,7 +158,7 @@ function registerIpcHandlers(store, autoUpdater, getMainWindow, scheduler) {
       let proc;
 
       // 智能处理命令中的文件路径：自动补 ./ 和引号
-      command = normalizeCommandPath(command, projectPath);
+      command = normalizeCommandPath(command, workDir);
 
       if (platform === 'darwin') {
         if (terminal === 'kaku') {
@@ -154,10 +166,10 @@ function registerIpcHandlers(store, autoUpdater, getMainWindow, scheduler) {
             resolve({ success: false, error: 'Kaku.app not found in /Applications' });
             return;
           }
-          proc = spawn('open', ['-n', '-a', 'Kaku', '--args', 'start', '--always-new-process', '--cwd', projectPath, '--', 'bash', '-c', "cd '" + projectPath + "' && " + command + "; exec bash"], { detached: true });
+          proc = spawn('open', ['-n', '-a', 'Kaku', '--args', 'start', '--always-new-process', '--cwd', workDir, '--', 'bash', '-c', "cd '" + workDir + "' && " + command + "; exec bash"], { detached: true });
           proc.unref();
         } else {
-          const safePath = projectPath.replace(/'/g, "'\\'");
+          const safePath = workDir.replace(/'/g, "'\\'");
           const script = `tell application "Terminal"
   activate
   do script "cd '${safePath}' && ${command}"
@@ -167,10 +179,10 @@ end tell`;
       } else if (platform === 'linux') {
         const terminals = ['gnome-terminal', 'xterm', 'xfce4-terminal', 'konsole'];
         const termArgs = {
-          'gnome-terminal': ['--', 'bash', '-c', "cd '" + projectPath + "' && " + command + '; exec bash'],
-          'xterm': ['-e', 'bash -c "cd \'' + projectPath + '\' && ' + command + '; exec bash"'],
-          'xfce4-terminal': ['-e', 'bash -c "cd \'' + projectPath + '\' && ' + command + '; exec bash"'],
-          'konsole': ['-e', 'bash', '-c', "cd '" + projectPath + "' && " + command + '; exec bash'],
+          'gnome-terminal': ['--', 'bash', '-c', "cd '" + workDir + "' && " + command + '; exec bash'],
+          'xterm': ['-e', 'bash -c "cd \'' + workDir + '\' && ' + command + '; exec bash"'],
+          'xfce4-terminal': ['-e', 'bash -c "cd \'' + workDir + '\' && ' + command + '; exec bash"'],
+          'konsole': ['-e', 'bash', '-c', "cd '" + workDir + "' && " + command + '; exec bash'],
         };
         let launched = false;
         for (const term of terminals) {
@@ -185,7 +197,7 @@ end tell`;
           return;
         }
       } else if (platform === 'win32') {
-        proc = spawn('cmd.exe', ['/c', 'start', 'cmd.exe', '/k', 'cd /d "' + projectPath + '" && ' + command], { shell: true });
+        proc = spawn('cmd.exe', ['/c', 'start', 'cmd.exe', '/k', 'cd /d "' + workDir + '" && ' + command], { shell: true });
       } else {
         resolve({ success: false, error: 'Unsupported platform: ' + platform });
         return;
@@ -238,19 +250,16 @@ end tell`;
         resolve({ success: false, error: 'Unregistered project path' });
         return;
       }
-      if (!fs.existsSync(projectPath)) {
-        resolve({ success: false, error: 'Project path does not exist' });
-        return;
-      }
+      const workDir = resolveWorkDir(projectPath);
 
-      command = normalizeCommandPath(command, projectPath);
+      command = normalizeCommandPath(command, workDir);
 
       const startTime = new Date().toISOString();
       const MAX_OUTPUT = 10 * 1024;
       let stdout = '';
       let stderr = '';
 
-      const proc = spawn('bash', ['-c', `cd '${projectPath.replace(/'/g, "'\\''")}' && ${command}`], {
+      const proc = spawn('bash', ['-c', `cd '${workDir.replace(/'/g, "'\\''")}' && ${command}`], {
         detached: false,
         stdio: ['ignore', 'pipe', 'pipe'],
         env: { ...process.env, ELECTRON_RUN_AS_NODE: undefined },
@@ -430,6 +439,46 @@ end tell`;
     if (result.canceled) return { canceled: true };
     const content = fs.readFileSync(result.filePaths[0], 'utf-8');
     return { canceled: false, data: content };
+  });
+
+  // --- Open Data Dir ---
+  ipcMain.handle('open-data-dir', async () => {
+    try {
+      await shell.openPath(store.dataDir);
+      return { success: true };
+    } catch (e) {
+      return { success: false, error: e.message };
+    }
+  });
+
+  // --- Reset Data ---
+  ipcMain.handle('reset-data', () => {
+    try {
+      store.resetData();
+      return { success: true };
+    } catch (e) {
+      return { success: false, error: e.message };
+    }
+  });
+
+  // --- Search History ---
+  ipcMain.handle('get-search-history', () => {
+    return store.getSetting('searchHistory') || [];
+  });
+
+  ipcMain.handle('save-search-history', (_event, history) => {
+    store.setSetting('searchHistory', history);
+    return { success: true };
+  });
+
+  // --- Open URL ---
+  ipcMain.handle('open-url', async (_event, url) => {
+    try {
+      await shell.openExternal(url);
+      return { success: true };
+    } catch (e) {
+      return { success: false, error: e.message };
+    }
   });
 
   // --- Locale ---

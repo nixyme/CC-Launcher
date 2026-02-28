@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 图标生成脚本
-生成带有"启动"两个汉字的应用图标
+生成带有"CC"两个字母的应用图标 (CC-Launcher)
 """
 from PIL import Image, ImageDraw, ImageFont
 import os
@@ -11,7 +11,7 @@ def create_icon():
     sizes = [16, 32, 48, 64, 128, 256, 512, 1024]
 
     # 颜色方案
-    bg_color = (34, 197, 94)  # 绿色背景 (代表启动/运行)
+    bg_color = (59, 130, 246)  # 蓝色背景 (品牌色)
     text_color = (255, 255, 255)  # 白色文字
 
     images = []
@@ -30,8 +30,8 @@ def create_icon():
             fill=bg_color
         )
 
-        # 绘制文字 "启动"
-        font_size = int(size * 0.35)
+        # 绘制文字 "CC"
+        font_size = int(size * 0.40)
         font = None
 
         # macOS 中文字体路径（按优先级排序）
@@ -68,8 +68,8 @@ def create_icon():
             print("警告: 未找到中文字体，使用默认字体")
             font = ImageFont.load_default()
 
-        # 绘制"启动"文字
-        text = "启动"
+        # 绘制"CC"文字
+        text = "CC"
         bbox = draw.textbbox((0, 0), text, font=font)
         text_width = bbox[2] - bbox[0]
         text_height = bbox[3] - bbox[1]

@@ -1,7 +1,7 @@
 {
   "name": "cc-launcher",
-  "version": "1.0.2",
-  "description": "CC 万能启动器 - 管理和启动 Claude Code 项目",
+  "version": "1.1.0",
+  "description": "CC-Launcher - Manage and launch Claude Code projects",
   "main": "src/main/index.js",
   "scripts": {
     "start": "electron .",
@@ -28,7 +28,7 @@
   },
   "build": {
     "appId": "com.claude.launcher",
-    "productName": "CC万能启动器",
+    "productName": "CC-Launcher",
     "directories": {
       "output": "dist"
     },
@@ -81,7 +81,7 @@
       "category": "Development"
     },
     "dmg": {
-      "title": "CC万能启动器",
+      "title": "CC-Launcher",
       "icon": "build/icon.icns",
       "contents": [
         {

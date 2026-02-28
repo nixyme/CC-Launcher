@@ -23,9 +23,12 @@ const icons = {
   info: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>',
   trash: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="40" height="40"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>',
   folder: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" width="40" height="40"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>',
+  pin: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="14" height="14"><path d="M12 17v5"/><path d="M9 11V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v7"/><path d="M5 17h14"/><path d="M7 11l-2 6h14l-2-6"/></svg>',
+  unpin: '<svg viewBox="0 0 24 24" fill="currentColor" width="14" height="14"><path d="M12 17v5"/><path d="M9 11V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v7"/><path d="M5 17h14"/><path d="M7 11l-2 6h14l-2-6"/></svg>',
   clock: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l2 2"/><path d="M5 3L2 6"/><path d="M22 6l-3-3"/></svg>',
   terminal: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="14" height="14"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>',
   silent: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="14" height="14"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>',
+  link: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="14" height="14"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>',
 };
 
 // === Init ===
@@ -91,6 +94,7 @@ function setupEventListeners() {
   document.getElementById('cancelModalBtn').addEventListener('click', closeModal);
   document.getElementById('saveProjectBtn').addEventListener('click', saveProject);
   document.getElementById('addCommandBtn').addEventListener('click', addCommandInput);
+  document.getElementById('addUrlBtn').addEventListener('click', addUrlInput);
   document.getElementById('settingsBtn').addEventListener('click', openSettings);
   document.getElementById('scheduleLogsBtn').addEventListener('click', openScheduleLogsModal);
 
@@ -109,6 +113,70 @@ function setupEventListeners() {
     searchQuery = e.target.value.toLowerCase();
     renderProjectList();
   });
+
+  // Search history
+  const searchHistoryDropdown = document.getElementById('searchHistoryDropdown');
+  let searchHistoryCache = [];
+
+  searchInput.addEventListener('focus', async () => {
+    searchHistoryCache = await window.electronAPI.getSearchHistory() || [];
+    renderSearchHistory();
+  });
+
+  searchInput.addEventListener('blur', () => {
+    // Delay hide to allow click on items
+    setTimeout(() => { searchHistoryDropdown.style.display = 'none'; }, 150);
+  });
+
+  searchInput.addEventListener('keydown', async (e) => {
+    if (e.key === 'Enter') {
+      const val = searchInput.value.trim();
+      if (val) {
+        // Save to history (dedup, newest first, max 10)
+        searchHistoryCache = searchHistoryCache.filter(h => h !== val);
+        searchHistoryCache.unshift(val);
+        if (searchHistoryCache.length > 10) searchHistoryCache.length = 10;
+        await window.electronAPI.saveSearchHistory(searchHistoryCache);
+        searchHistoryDropdown.style.display = 'none';
+      }
+    }
+  });
+
+  function renderSearchHistory() {
+    if (searchHistoryCache.length === 0) {
+      searchHistoryDropdown.style.display = 'none';
+      return;
+    }
+    searchHistoryDropdown.innerHTML = '';
+    searchHistoryCache.forEach((item, idx) => {
+      const row = document.createElement('div');
+      row.className = 'search-history-item';
+      const text = document.createElement('span');
+      text.className = 'search-history-text';
+      text.textContent = item;
+      text.addEventListener('mousedown', (e) => {
+        e.preventDefault();
+        searchInput.value = item;
+        searchQuery = item.toLowerCase();
+        renderProjectList();
+        searchHistoryDropdown.style.display = 'none';
+      });
+      const delBtn = document.createElement('button');
+      delBtn.className = 'search-history-del';
+      delBtn.innerHTML = icons.x;
+      delBtn.addEventListener('mousedown', async (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        searchHistoryCache.splice(idx, 1);
+        await window.electronAPI.saveSearchHistory(searchHistoryCache);
+        renderSearchHistory();
+      });
+      row.appendChild(text);
+      row.appendChild(delBtn);
+      searchHistoryDropdown.appendChild(row);
+    });
+    searchHistoryDropdown.style.display = 'block';
+  }
 }
 
 function setupKeyboardShortcuts() {
@@ -178,7 +246,65 @@ function renderProjectList() {
     return;
   }
 
-  filtered.forEach((project, index) => {
+  const pinned = filtered.filter(p => p.pinned);
+  const unpinned = filtered.filter(p => !p.pinned);
+
+  // Pinned grid
+  if (pinned.length > 0) {
+    const grid = document.createElement('div');
+    grid.className = 'pinned-grid';
+    let pinnedDraggedEl = null;
+
+    pinned.forEach((project) => {
+      const item = document.createElement('div');
+      item.className = 'pinned-item';
+      if (currentProject && currentProject.id === project.id) item.classList.add('active');
+      item.title = project.name;
+      item.dataset.projectId = project.id;
+      item.draggable = true;
+      item.textContent = project.name;
+      item.addEventListener('click', () => selectProject(project));
+
+      // Drag & drop for pinned items
+      item.addEventListener('dragstart', (e) => {
+        pinnedDraggedEl = item;
+        item.classList.add('dragging');
+        e.dataTransfer.effectAllowed = 'move';
+        e.dataTransfer.setData('text/pinned', project.id);
+      });
+      item.addEventListener('dragend', () => {
+        item.classList.remove('dragging');
+        grid.querySelectorAll('.pinned-item').forEach(i => i.classList.remove('drag-over'));
+      });
+      item.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+        if (pinnedDraggedEl && pinnedDraggedEl !== item) item.classList.add('drag-over');
+      });
+      item.addEventListener('dragleave', () => item.classList.remove('drag-over'));
+      item.addEventListener('drop', async (e) => {
+        e.preventDefault();
+        item.classList.remove('drag-over');
+        if (!pinnedDraggedEl || pinnedDraggedEl === item) return;
+        const draggedId = pinnedDraggedEl.dataset.projectId;
+        const targetId = item.dataset.projectId;
+        const draggedIdx = projects.findIndex(p => p.id === draggedId);
+        const targetIdx = projects.findIndex(p => p.id === targetId);
+        if (draggedIdx !== -1 && targetIdx !== -1) {
+          const [removed] = projects.splice(draggedIdx, 1);
+          projects.splice(targetIdx, 0, removed);
+          await window.electronAPI.reorderProjects(projects.map(p => p.id));
+          renderProjectList();
+        }
+      });
+
+      grid.appendChild(item);
+    });
+    projectList.appendChild(grid);
+  }
+
+  // Normal list
+  unpinned.forEach((project, index) => {
     const item = document.createElement('div');
     item.className = 'project-item';
     item.draggable = true;
@@ -255,14 +381,42 @@ function showProjectDetails() {
   welcomeMessage.style.display = 'none';
   projectDetails.style.display = 'block';
   document.getElementById('projectName').textContent = currentProject.name;
-  document.getElementById('projectPath').textContent = currentProject.path;
-  document.getElementById('outputPath').textContent = currentProject.result_path;
+  document.getElementById('projectPath').textContent = currentProject.path || '';
+  document.getElementById('outputPath').textContent = currentProject.result_path || '';
+
+  // Hide path sections when empty
+  const pathSection = document.getElementById('projectPath').closest('.info-item');
+  if (pathSection) pathSection.style.display = currentProject.path ? '' : 'none';
+
+  // Pin button in header
+  let pinBtn = document.getElementById('pinProjectBtn');
+  if (!pinBtn) {
+    pinBtn = document.createElement('button');
+    pinBtn.id = 'pinProjectBtn';
+    pinBtn.className = 'btn-secondary';
+    document.querySelector('.action-buttons').insertBefore(pinBtn, document.getElementById('editProjectBtn'));
+  }
+  const isPinned = currentProject.pinned;
+  pinBtn.innerHTML = `${isPinned ? icons.unpin : icons.pin}<span>${isPinned ? t('pin.unpin') : t('pin.pin')}</span>`;
+  pinBtn.onclick = async () => {
+    const result = await window.electronAPI.togglePin(currentProject.id);
+    if (result.success) {
+      currentProject.pinned = result.data.pinned;
+      const idx = projects.findIndex(p => p.id === currentProject.id);
+      if (idx !== -1) projects[idx].pinned = currentProject.pinned;
+      await loadProjects();
+      const updated = projects.find(p => p.id === currentProject.id);
+      if (updated) { currentProject = updated; showProjectDetails(); }
+      renderProjectList();
+    }
+  };
   // Hide output path section if empty
   const outputSection = document.getElementById('outputPathSection');
   if (outputSection) outputSection.style.display = currentProject.result_path ? '' : 'none';
   // Load schedule cache for current project then render commands
   loadScheduleCacheForProject(currentProject.id).then(() => {
     renderCommandsDisplay();
+    renderUrlBlocks();
   });
 }
 
@@ -422,6 +576,47 @@ function renderCommandsDisplay() {
   }
 }
 
+// === URL Blocks (Details Page) ===
+function renderUrlBlocks() {
+  const urls = currentProject?.urls || [];
+  // Remove existing url section
+  let urlSection = document.getElementById('urlBlocksSection');
+  if (urlSection) urlSection.remove();
+
+  if (urls.length === 0) return;
+
+  const detailsContent = document.querySelector('.details-content');
+  urlSection = document.createElement('div');
+  urlSection.id = 'urlBlocksSection';
+  urlSection.className = 'info-item';
+  const label = document.createElement('label');
+  label.textContent = t('url.title') || 'URLs';
+  const container = document.createElement('div');
+  container.className = 'url-blocks';
+  urls.forEach((u) => {
+    const block = document.createElement('div');
+    block.className = 'url-block';
+    block.title = u.url;
+    block.textContent = u.name || extractDomain(u.url);
+    block.addEventListener('click', () => {
+      window.electronAPI.openUrl(u.url);
+    });
+    container.appendChild(block);
+  });
+  urlSection.appendChild(label);
+  urlSection.appendChild(container);
+  detailsContent.appendChild(urlSection);
+}
+
+function extractDomain(url) {
+  try {
+    const u = new URL(url);
+    return u.hostname.replace('www.', '').split('.')[0];
+  } catch {
+    return url.slice(0, 10);
+  }
+}
+
 // === Modal ===
 function openModal(editMode = false, project = null) {
   isEditMode = editMode;
@@ -431,11 +626,13 @@ function openModal(editMode = false, project = null) {
     document.getElementById('modalProjectPath').value = project.path;
     document.getElementById('modalOutputPath').value = project.result_path;
     renderCommandInputs(project.commands || [], project.command_names || [], project.command_modes || []);
+    renderUrlInputs(project.urls || []);
   } else {
     document.getElementById('modalProjectName').value = '';
     document.getElementById('modalProjectPath').value = '';
     document.getElementById('modalOutputPath').value = '';
     renderCommandInputs(['claude --dangerously-skip-permissions '], [''], ['terminal']);
+    renderUrlInputs([]);
   }
   projectModal.classList.add('show');
   // Focus first input after animation
@@ -502,8 +699,7 @@ function addCommandInputWithValue(value = '', name = '', mode = 'terminal') {
   removeBtn.className = 'btn-remove-command';
   removeBtn.innerHTML = icons.x;
   removeBtn.addEventListener('click', () => {
-    if (list.children.length > 1) item.remove();
-    else showToast(t('msg.minOneCommand'), 'error');
+    item.remove();
   });
   item.appendChild(input);
   item.appendChild(nameInput);
@@ -515,6 +711,42 @@ function addCommandInputWithValue(value = '', name = '', mode = 'terminal') {
 
 function addCommandInput() {
   addCommandInputWithValue('claude --dangerously-skip-permissions ', '', 'terminal');
+}
+
+// === URL Inputs ===
+function renderUrlInputs(urls = []) {
+  const list = document.getElementById('urlsList');
+  list.innerHTML = '';
+  urls.forEach(u => addUrlInputWithValue(u.url || '', u.name || ''));
+}
+
+function addUrlInputWithValue(url = '', name = '') {
+  const list = document.getElementById('urlsList');
+  const item = document.createElement('div');
+  item.className = 'command-item';
+  const urlInput = document.createElement('input');
+  urlInput.type = 'text';
+  urlInput.className = 'form-input';
+  urlInput.placeholder = 'https://...';
+  urlInput.value = url;
+  const nameInput = document.createElement('input');
+  nameInput.type = 'text';
+  nameInput.className = 'form-input command-name-field';
+  nameInput.placeholder = t('url.name') || 'Name';
+  nameInput.value = name;
+  const removeBtn = document.createElement('button');
+  removeBtn.type = 'button';
+  removeBtn.className = 'btn-remove-command';
+  removeBtn.innerHTML = icons.x;
+  removeBtn.addEventListener('click', () => item.remove());
+  item.appendChild(urlInput);
+  item.appendChild(nameInput);
+  item.appendChild(removeBtn);
+  list.appendChild(item);
+}
+
+function addUrlInput() {
+  addUrlInputWithValue('', '');
 }
 
 function closeModal() { projectModal.classList.remove('show'); }
@@ -541,19 +773,29 @@ async function saveProject() {
     }
   });
 
-  if (!name || !projPath || commands.length === 0) {
-    showToast(t('msg.fillAllFields'), 'error');
+  if (!name) {
+    showToast(t('msg.nameRequired'), 'error');
     return;
   }
+
+  // Collect URLs
+  const urlItems = document.querySelectorAll('#urlsList .command-item');
+  const urls = [];
+  urlItems.forEach(item => {
+    const inputs = item.querySelectorAll('input');
+    const urlVal = inputs[0].value.trim();
+    const urlName = inputs[1] ? inputs[1].value.trim() : '';
+    if (urlVal) urls.push({ url: urlVal, name: urlName });
+  });
 
   let result;
   if (isEditMode && currentProject) {
     result = await window.electronAPI.updateProject(currentProject.id, {
-      name, path: projPath, commands, command_names: commandNames, command_modes: commandModes, result_path: outputPath,
+      name, path: projPath, commands, command_names: commandNames, command_modes: commandModes, result_path: outputPath, urls,
     });
   } else {
     result = await window.electronAPI.addProject({
-      name, path: projPath, commands, command_names: commandNames, command_modes: commandModes, result_path: outputPath,
+      name, path: projPath, commands, command_names: commandNames, command_modes: commandModes, result_path: outputPath, urls,
     });
   }
 
@@ -865,6 +1107,29 @@ function setupSettings() {
   // Import / Export (now in settings)
   document.getElementById('exportBtn').addEventListener('click', exportSettings);
   document.getElementById('importBtn').addEventListener('click', importSettings);
+
+  // Open data directory
+  document.getElementById('openDataDirBtn').addEventListener('click', async () => {
+    await window.electronAPI.openDataDir();
+  });
+
+  // Reset data
+  document.getElementById('resetDataBtn').addEventListener('click', async () => {
+    const confirmed = await showConfirm(
+      t('settings.resetDataTitle'),
+      t('settings.resetDataConfirm')
+    );
+    if (!confirmed) return;
+    const result = await window.electronAPI.resetData();
+    if (result.success) {
+      showToast(t('settings.resetDataDone'), 'success');
+      closeSettings();
+      currentProject = null;
+      await loadProjects();
+      welcomeMessage.style.display = 'flex';
+      projectDetails.style.display = 'none';
+    }
+  });
 
   document.getElementById('autoLaunchToggle').addEventListener('change', async (e) => {
     await window.electronAPI.setAutoLaunch(e.target.checked);
