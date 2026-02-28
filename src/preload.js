@@ -65,15 +65,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   setAutoLaunch: (enabled) => ipcRenderer.invoke('set-auto-launch', enabled),
   getAppVersion: () => ipcRenderer.invoke('get-app-version'),
 
-  // 自动更新
+  // 自动更新（GitHub API 方式）
   checkForUpdate: () => ipcRenderer.invoke('check-for-update'),
-  downloadUpdate: () => ipcRenderer.invoke('download-update'),
-  installUpdate: () => ipcRenderer.invoke('install-update'),
-  onUpdateAvailable: (cb) => ipcRenderer.on('update-available', (_e, info) => cb(info)),
-  onUpdateNotAvailable: (cb) => ipcRenderer.on('update-not-available', () => cb()),
-  onUpdateDownloadProgress: (cb) => ipcRenderer.on('update-download-progress', (_e, p) => cb(p)),
-  onUpdateDownloaded: (cb) => ipcRenderer.on('update-downloaded', (_e, info) => cb(info)),
-  onUpdateError: (cb) => ipcRenderer.on('update-error', (_e, msg) => cb(msg)),
+  downloadUpdate: (url) => ipcRenderer.invoke('download-update', url),
 
   // 定时任务
   getSchedules: () => ipcRenderer.invoke('get-schedules'),

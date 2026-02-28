@@ -42,66 +42,8 @@ function createWindow() {
 }
 
 // === Auto Updater ===
-function setupAutoUpdater() {
-  if (isDev) {
-    console.log('[AutoUpdater] Skipped in dev mode');
-    return null;
-  }
-
-  const { autoUpdater } = require('electron-updater');
-  autoUpdater.autoDownload = true;           // 检测到更新后自动下载
-  autoUpdater.autoInstallOnAppQuit = false;  // 不自动安装，等用户确认
-
-  autoUpdater.on('checking-for-update', () => {
-    console.log('[AutoUpdater] Checking for update...');
-    if (mainWindow) {
-      mainWindow.webContents.send('update-checking');
-    }
-  });
-
-  autoUpdater.on('update-available', (info) => {
-    console.log('[AutoUpdater] Update available:', info.version);
-    if (mainWindow) {
-      mainWindow.webContents.send('update-available', {
-        version: info.version,
-        releaseNotes: info.releaseNotes,
-      });
-    }
-  });
-
-  autoUpdater.on('update-not-available', () => {
-    console.log('[AutoUpdater] Already up to date');
-    if (mainWindow) {
-      mainWindow.webContents.send('update-not-available');
-    }
-  });
-
-  autoUpdater.on('download-progress', (progress) => {
-    if (mainWindow) {
-      mainWindow.webContents.send('update-download-progress', {
-        percent: Math.round(progress.percent),
-      });
-    }
-  });
-
-  autoUpdater.on('update-downloaded', (info) => {
-    console.log('[AutoUpdater] Update downloaded:', info.version);
-    if (mainWindow) {
-      mainWindow.webContents.send('update-downloaded', {
-        version: info.version,
-      });
-    }
-  });
-
-  autoUpdater.on('error', (err) => {
-    console.error('[AutoUpdater] Error:', err.message);
-    if (mainWindow) {
-      mainWindow.webContents.send('update-error', err.message);
-    }
-  });
-
-  return autoUpdater;
-}
+// 不使用 electron-updater（需要 Apple 签名），改用 GitHub API 手动检查
+// 流程：检查版本 → 显示新版本 → 用户点击下载 → 浏览器打开 DMG
 
 // 激活主窗口（从任意位置唤起）
 function activateMainWindow() {
@@ -135,23 +77,11 @@ app.whenReady().then(() => {
   scheduler = new Scheduler(store, () => mainWindow);
   scheduler.init();
 
-  // 初始化自动更新
-  const autoUpdater = setupAutoUpdater();
-
-  // 注册 IPC 处理（传入 getMainWindow 函数以便 IPC 获取窗口引用）
-  registerIpcHandlers(store, autoUpdater, () => mainWindow, scheduler);
+  // 注册 IPC 处理
+  registerIpcHandlers(store, null, () => mainWindow, scheduler);
 
   // 直接创建窗口
   mainWindow = createWindow();
-
-  // 启动后延迟 3 秒自动检查更新
-  if (autoUpdater) {
-    setTimeout(() => {
-      autoUpdater.checkForUpdates().catch((err) => {
-        console.error('[AutoUpdater] Auto-check failed:', err.message);
-      });
-    }, 3000);
-  }
 
   // 恢复全局快捷键
   const savedShortcut = store.getSetting('globalShortcut');

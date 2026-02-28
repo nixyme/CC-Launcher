@@ -22,7 +22,6 @@
     "electron-builder": "^24.9.1"
   },
   "dependencies": {
-    "electron-updater": "^6.8.3",
     "node-cron": "^3.0.3",
     "uuid": "^9.0.0"
   },
@@ -47,12 +46,6 @@
       "target": [
         {
           "target": "dmg",
-          "arch": [
-            "arm64"
-          ]
-        },
-        {
-          "target": "zip",
           "arch": [
             "arm64"
           ]
@@ -85,11 +78,6 @@
         }
       ],
       "category": "Development"
-    },
-    "publish": {
-      "provider": "github",
-      "owner": "nixyme",
-      "repo": "CC-Launcher"
     },
     "dmg": {
       "title": "CC-Launcher",

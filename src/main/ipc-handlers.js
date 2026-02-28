@@ -53,6 +53,19 @@ function normalizeCommandPath(command, projectPath) {
   return command;
 }
 
+// 版本号比较：返回 1(a>b), -1(a<b), 0(a==b)
+function compareVersions(a, b) {
+  const pa = a.split('.').map(Number);
+  const pb = b.split('.').map(Number);
+  for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
+    const na = pa[i] || 0;
+    const nb = pb[i] || 0;
+    if (na > nb) return 1;
+    if (na < nb) return -1;
+  }
+  return 0;
+}
+
 function registerIpcHandlers(store, autoUpdater, getMainWindow, scheduler) {
   // --- 项目 CRUD ---
   ipcMain.handle('get-projects', () => {
@@ -560,31 +573,68 @@ end tell`;
     return app.getVersion();
   });
 
-  // --- Auto Update ---
+  // --- Auto Update (GitHub API) ---
   ipcMain.handle('check-for-update', async () => {
-    if (!autoUpdater) return { success: false, error: 'dev_mode' };
-    try {
-      const result = await autoUpdater.checkForUpdates();
-      return { success: true, data: result };
-    } catch (e) {
-      return { success: false, error: e.message };
-    }
+    const https = require('https');
+    const currentVersion = app.getVersion();
+    return new Promise((resolve) => {
+      const opts = {
+        hostname: 'api.github.com',
+        path: '/repos/nixyme/CC-Launcher/releases/latest',
+        headers: { 'User-Agent': 'CC-Launcher/' + currentVersion },
+      };
+      https.get(opts, (res) => {
+        let data = '';
+        res.on('data', (chunk) => { data += chunk; });
+        res.on('end', () => {
+          try {
+            if (res.statusCode !== 200) {
+              resolve({ success: false, error: `GitHub API: ${res.statusCode}` });
+              return;
+            }
+            const release = JSON.parse(data);
+            const latestVersion = (release.tag_name || '').replace(/^v/, '');
+            if (!latestVersion) {
+              resolve({ success: false, error: 'No version found' });
+              return;
+            }
+            // 找到 DMG 下载链接
+            const dmgAsset = (release.assets || []).find(a => a.name.endsWith('.dmg'));
+            const isNewer = compareVersions(latestVersion, currentVersion) > 0;
+            resolve({
+              success: true,
+              data: {
+                currentVersion,
+                latestVersion,
+                isNewer,
+                releaseNotes: release.body || '',
+                downloadUrl: dmgAsset ? dmgAsset.browser_download_url : release.html_url,
+                releaseUrl: release.html_url,
+              },
+            });
+          } catch (e) {
+            resolve({ success: false, error: e.message });
+          }
+        });
+      }).on('error', (e) => {
+        resolve({ success: false, error: e.message });
+      });
+    });
   });
 
-  ipcMain.handle('download-update', async () => {
-    if (!autoUpdater) return { success: false, error: 'dev_mode' };
+  // 打开下载页面（浏览器下载 DMG）
+  ipcMain.handle('download-update', async (_event, url) => {
     try {
-      await autoUpdater.downloadUpdate();
+      await shell.openExternal(url);
       return { success: true };
     } catch (e) {
       return { success: false, error: e.message };
     }
   });
 
+  // install-update 不再需要，保留空实现兼容前端
   ipcMain.handle('install-update', () => {
-    if (!autoUpdater) return { success: false, error: 'dev_mode' };
-    autoUpdater.quitAndInstall(false, true);
-    return { success: true };
+    return { success: false, error: 'Manual install required' };
   });
 
   // --- Schedule CRUD ---

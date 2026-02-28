@@ -1144,61 +1144,34 @@ function setupSettings() {
     statusEl.textContent = t('settings.checking');
     const result = await window.electronAPI.checkForUpdate();
     if (!result.success) {
-      if (result.error === 'dev_mode') {
-        statusEl.textContent = t('settings.devModeNoUpdate');
-      } else {
-        statusEl.textContent = t('settings.updateError') + ': ' + result.error;
-      }
+      statusEl.textContent = t('settings.updateError') + ': ' + result.error;
+      btn.disabled = false;
+      btn.textContent = t('settings.checkUpdate');
+      return;
+    }
+    const info = result.data;
+    if (info.isNewer) {
+      statusEl.textContent = t('settings.newVersion', { version: info.latestVersion });
+      btn.textContent = t('settings.download');
+      btn.disabled = false;
+      btn.onclick = async () => {
+        await window.electronAPI.downloadUpdate(info.downloadUrl);
+        statusEl.textContent = t('settings.downloadStarted');
+        btn.textContent = t('settings.checkUpdate');
+        btn.disabled = false;
+        btn.onclick = null;
+      };
+    } else {
+      statusEl.textContent = t('settings.upToDate');
       btn.disabled = false;
       btn.textContent = t('settings.checkUpdate');
     }
-    // Success result comes via events
   });
 }
 
-// === Auto Updater Events ===
+// setupAutoUpdater 不再需要 electron-updater 事件，保留空函数
 function setupAutoUpdater() {
-  if (!window.electronAPI.onUpdateAvailable) return;
-
-  window.electronAPI.onUpdateAvailable((info) => {
-    const statusEl = document.getElementById('updateStatus');
-    const btn = document.getElementById('checkUpdateBtn');
-    // autoDownload=true，自动下载中，无需手动点击
-    statusEl.textContent = t('settings.downloading') + ' v' + info.version + '...';
-    btn.disabled = true;
-    btn.textContent = t('settings.downloading');
-  });
-
-  window.electronAPI.onUpdateNotAvailable(() => {
-    document.getElementById('updateStatus').textContent = t('settings.upToDate');
-    const btn = document.getElementById('checkUpdateBtn');
-    btn.textContent = t('settings.checkUpdate');
-    btn.disabled = false;
-  });
-
-  window.electronAPI.onUpdateDownloadProgress((progress) => {
-    document.getElementById('updateStatus').textContent = t('settings.downloadProgress', { percent: progress.percent });
-  });
-
-  window.electronAPI.onUpdateDownloaded((info) => {
-    const statusEl = document.getElementById('updateStatus');
-    const btn = document.getElementById('checkUpdateBtn');
-    const ver = info && info.version ? ' v' + info.version : '';
-    statusEl.textContent = t('settings.readyToInstall') + ver;
-    btn.textContent = t('settings.installRestart');
-    btn.disabled = false;
-    btn.onclick = () => {
-      window.electronAPI.installUpdate();
-    };
-  });
-
-  window.electronAPI.onUpdateError((msg) => {
-    document.getElementById('updateStatus').textContent = t('settings.updateError') + ': ' + msg;
-    const btn = document.getElementById('checkUpdateBtn');
-    btn.textContent = t('settings.checkUpdate');
-    btn.disabled = false;
-    console.error('Update error:', msg);
-  });
+  // GitHub API 方式不需要事件监听，全部在 checkUpdateBtn click 中处理
 }
 
 // === Command Input: Paste Image & Drag File Support ===
