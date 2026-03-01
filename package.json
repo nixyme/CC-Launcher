@@ -1,6 +1,6 @@
 {
   "name": "start-everything",
-  "version": "1.1.5",
+  "version": "1.1.6",
   "description": "START EVERYTHING - Universal launcher for any command, project, or workflow",
   "main": "src/main/index.js",
   "scripts": {
