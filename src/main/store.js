@@ -35,7 +35,7 @@ class ProjectStore {
       default_command: 'claude --dangerously-skip-permissions',
       result_path: '',
       urls: [
-        { url: 'https://github.com/nixyme/Start-Everything', name: 'Launcher' },
+        { url: 'https://github.com/nixyme/start-everything', name: 'Launcher' },
         { url: 'https://github.com/farion1231/cc-switch', name: 'cc-switch' },
       ],
       pinned: false,

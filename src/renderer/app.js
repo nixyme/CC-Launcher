@@ -1299,7 +1299,7 @@ function setupSettings() {
   // Project URL link
   document.getElementById('projectUrlLink').addEventListener('click', (e) => {
     e.preventDefault();
-    window.electronAPI.openUrl('https://github.com/nixyme/Start-Everything');
+    window.electronAPI.openUrl('https://github.com/nixyme/start-everything');
   });
 
   // Reset data

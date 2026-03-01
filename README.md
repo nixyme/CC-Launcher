@@ -120,7 +120,7 @@ Serving multiple clients? Each client as a project, commands, paths, output dire
 ### Run from Source
 
 ```bash
-git clone https://github.com/nixyme/Start-Everything.git
+git clone https://github.com/nixyme/start-everything.git
 cd Start-Everything
 npm install
 npm start

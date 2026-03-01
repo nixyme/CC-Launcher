@@ -580,8 +580,8 @@ end tell`;
     return new Promise((resolve) => {
       const opts = {
         hostname: 'api.github.com',
-        path: '/repos/nixyme/Start-Everything/releases/latest',
-        headers: { 'User-Agent': 'Start-Everything/' + currentVersion },
+        path: '/repos/nixyme/start-everything/releases/latest',
+        headers: { 'User-Agent': 'START-EVERYTHING/' + currentVersion },
       };
       https.get(opts, (res) => {
         let data = '';
