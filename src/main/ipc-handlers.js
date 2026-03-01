@@ -444,13 +444,26 @@ end tell`;
 
   ipcMain.handle('open-file', async () => {
     const win = BrowserWindow.getFocusedWindow();
+    const lastPath = store.getSetting('lastImportPath');
+    const path = require('path');
+
+    // 如果有上次的路径，使用其目录作为默认目录
+    const defaultPath = lastPath ? path.dirname(lastPath) : undefined;
+
     const result = await dialog.showOpenDialog(win, {
       title: 'Import Settings',
+      defaultPath: defaultPath,
       filters: [{ name: 'JSON Files', extensions: ['json'] }],
       properties: ['openFile'],
     });
     if (result.canceled) return { canceled: true };
-    const content = fs.readFileSync(result.filePaths[0], 'utf-8');
+
+    const filePath = result.filePaths[0];
+    const content = fs.readFileSync(filePath, 'utf-8');
+
+    // 保存此次导入的路径
+    store.setSetting('lastImportPath', filePath);
+
     return { canceled: false, data: content };
   });
 
