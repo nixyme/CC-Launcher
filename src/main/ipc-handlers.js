@@ -640,23 +640,31 @@ end tell`;
     console.log('[Auto Launch] Set:', enabled);
     console.log('[Auto Launch] App path:', app.getPath('exe'));
     console.log('[Auto Launch] Is packaged:', app.isPackaged);
+    console.log('[Auto Launch] Platform:', process.platform);
 
-    // In development mode, auto-launch may not work
     if (!app.isPackaged) {
       console.log('[Auto Launch] Warning: Auto-launch may not work in development mode');
     }
 
-    app.setLoginItemSettings({
-      openAtLogin: enabled,
-      openAsHidden: false,
-      path: app.getPath('exe')
-    });
+    try {
+      const loginSettings = { openAtLogin: enabled };
 
-    // Verify the setting was applied
-    const settings = app.getLoginItemSettings();
-    console.log('[Auto Launch] Verified:', settings);
+      // path is Windows-only; openAsHidden is deprecated on macOS 13+
+      if (process.platform === 'win32') {
+        loginSettings.path = app.getPath('exe');
+      }
 
-    return { success: true, value: settings.openAtLogin };
+      app.setLoginItemSettings(loginSettings);
+
+      // Verify the setting was applied
+      const settings = app.getLoginItemSettings();
+      console.log('[Auto Launch] Verified:', settings);
+
+      return { success: true, value: settings.openAtLogin };
+    } catch (e) {
+      console.error('[Auto Launch] Error setting login item:', e);
+      return { success: false, error: e.message };
+    }
   });
 
   // --- App Info ---
@@ -820,9 +828,12 @@ end tell`;
       // 6. 清理下载文件
       try { fs.unlinkSync(filePath); } catch { /* ignore */ }
 
-      // 7. 重启应用
-      spawn('open', ['-n', destApp], { detached: true, stdio: 'ignore' }).unref();
-      setTimeout(() => app.quit(), 800);
+      // 7. 重启应用：先退出旧进程，延迟后再启动新版本，避免双图标
+      spawn('/bin/sh', ['-c', `sleep 1 && open "${destApp}"`], {
+        detached: true,
+        stdio: 'ignore',
+      }).unref();
+      app.quit();
 
       return { success: true };
     } catch (e) {
