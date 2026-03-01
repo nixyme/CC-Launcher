@@ -7,9 +7,11 @@
     "start": "electron .",
     "build": "electron-builder",
     "build:mac": "electron-builder --mac",
+    "build:mac-arm64": "electron-builder --mac --arm64",
+    "build:mac-x64": "electron-builder --mac --x64",
     "build:win": "electron-builder --win",
     "build:linux": "electron-builder --linux",
-    "build:all": "electron-builder --mac --win --linux"
+    "build:all": "npm run build:mac-arm64 && npm run build:mac-x64 && npm run build:win && npm run build:linux"
   },
   "keywords": [
     "claude",
@@ -32,6 +34,7 @@
   "build": {
     "appId": "com.nixyme.start-everything",
     "productName": "START EVERYTHING",
+    "artifactName": "${productName}-${version}-${arch}.${ext}",
     "directories": {
       "output": "dist"
     },
@@ -93,19 +96,7 @@
     },
     "dmg": {
       "title": "START EVERYTHING",
-      "icon": "build/icon.icns",
-      "contents": [
-        {
-          "x": 130,
-          "y": 220
-        },
-        {
-          "x": 410,
-          "y": 220,
-          "type": "link",
-          "path": "/Applications"
-        }
-      ]
+      "icon": "build/icon.icns"
     }
   }
 }
