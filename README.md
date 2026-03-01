@@ -5,15 +5,15 @@
 <h1 align="center">Start Everything</h1>
 
 <p align="center">
-  <strong>一个优雅的万能命令启动器，让你一键启动任何应用、脚本和工作流。</strong>
+  <strong>An elegant universal launcher to start any app, script, or workflow with one click.</strong>
 </p>
 
 <p align="center">
-  <a href="#功能亮点">功能</a> •
-  <a href="#截图预览">截图</a> •
-  <a href="#快速开始">安装</a> •
-  <a href="#使用场景">场景</a> •
-  <a href="#多语言">i18n</a> •
+  <a href="#features">Features</a> •
+  <a href="#screenshots">Screenshots</a> •
+  <a href="#quick-start">Installation</a> •
+  <a href="#use-cases">Use Cases</a> •
+  <a href="#i18n">i18n</a> •
   <a href="#license">License</a>
 </p>
 
@@ -26,98 +26,98 @@
 
 ---
 
-## 这不只是 Claude Code 启动器
+## More Than Just a Launcher
 
-虽然名字里带着 "Start Everything"，但它是一个通用的命令启动器。任何能通过终端命令启动的东西，它都能管：
+Start Everything is a universal command launcher. Anything you can run in a terminal, it can manage:
 
-| 场景 | 示例命令 |
-|------|---------|
-| AI 编程助手 | `claude --dangerously-skip-permissions` |
-| Web 开发 | `npm run dev` / `yarn start` |
-| Docker 服务 | `docker compose up -d` |
-| Python 项目 | `python main.py` / `uvicorn app:app` |
-| 自动化脚本 | `./deploy.sh` / `make build` |
-| 任意程序 | 你能在终端里敲的，这里都能一键跑 |
+| Scenario | Example Commands |
+|----------|------------------|
+| AI Coding Assistants | `claude --dangerously-skip-permissions` |
+| Web Development | `npm run dev` / `yarn start` |
+| Docker Services | `docker compose up -d` |
+| Python Projects | `python main.py` / `uvicorn app:app` |
+| Automation Scripts | `./deploy.sh` / `make build` |
+| Any Program | If you can type it in a terminal, you can run it here |
 
-> 把它想象成一个可视化的、带项目管理功能的终端快捷方式面板。
-
----
-
-## 功能亮点
-
-- **项目管理** — 集中管理所有项目，告别在文件夹间反复跳转
-- **多命令支持** — 每个项目可配置多条命令，开发、构建、部署一键切换
-- **一键启动** — 点击 Run 即在系统终端中执行，无需手动 cd + 输入命令
-- **拖拽排序** — 按使用频率自由排列项目顺序
-- **即时搜索** — `⌘F` 快速定位项目，管理 50+ 项目也不慌
-- **结果路径** — 为每个项目绑定输出目录，一键打开查看产物
-- **导入/导出** — JSON 格式配置迁移，换机无忧
-- **暗色主题** — 开发者友好的深色 UI，长时间使用不伤眼
-- **多语言** — 内置 English / 中文 / 日本語 / Français
-- **跨平台** — macOS、Windows、Linux 全覆盖
-- **零依赖** — 纯 Electron + Node.js，无需 Python 或其他运行时
-- **秒启动** — 无后端服务，打开即用
+> Think of it as a visual, project-aware terminal shortcut panel.
 
 ---
 
-## 截图预览
+## Features
 
-### 主界面 — 项目列表 + 详情
-
-<p align="center">
-  <img src="docs/screenshots/main-ui.png" alt="主界面" width="800">
-</p>
-
-> 左侧项目列表，右侧项目详情与命令面板。暗色主题，开发者风格。
-
-### 新建项目
-
-<p align="center">
-  <img src="docs/screenshots/new-project.png" alt="新建项目" width="800">
-</p>
-
-> 填写项目名称、选择路径、配置命令，几秒完成。
-
-### 命令执行
-
-<p align="center">
-  <img src="docs/screenshots/command-run.png" alt="命令执行" width="800">
-</p>
-
-> 每条命令可直接编辑，回车或点击 Run 即在终端中启动。
-
-### 多语言切换
-
-<p align="center">
-  <img src="docs/screenshots/i18n.png" alt="多语言" width="800">
-</p>
-
-> 右上角一键切换语言，界面实时刷新。
+- **Project Management** — Centralize all projects, no more jumping between folders
+- **Multi-Command Support** — Configure multiple commands per project, switch between dev/build/deploy with one click
+- **One-Click Launch** — Click Run to execute in system terminal, no manual cd + typing
+- **Drag & Drop Sorting** — Arrange projects by usage frequency
+- **Instant Search** — `⌘F` to quickly locate projects, manage 50+ projects effortlessly
+- **Result Path** — Bind output directory to each project, open results with one click
+- **Import/Export** — JSON-based config migration, seamless machine transfer
+- **Dark Theme** — Developer-friendly dark UI, easy on the eyes
+- **Multi-Language** — Built-in English / 中文 / 日本語 / Français
+- **Cross-Platform** — macOS, Windows, Linux fully supported
+- **Zero Dependencies** — Pure Electron + Node.js, no Python or other runtimes
+- **Instant Startup** — No backend service, ready to use immediately
 
 ---
 
-## 使用场景
+## Screenshots
 
-### 1. AI 编程工作流
-管理多个 Claude Code / Cursor / Copilot 项目，每个项目配置不同的启动参数，一键进入工作状态。
+### Main Interface — Project List + Details
 
-### 2. 全栈开发者
-前端项目 `npm run dev`、后端 `go run main.go`、数据库 `docker compose up` — 全部集中在一个面板里。
+<p align="center">
+  <img src="docs/screenshots/main-ui-en.png" alt="Main Interface" width="800">
+</p>
 
-### 3. DevOps / 运维
-部署脚本、监控启动、日志查看 — 把常用操作固化为项目命令，新人也能一键操作。
+> Left: project list, Right: project details and command panel. Dark theme, developer style.
 
-### 4. 数据科学
-Jupyter Notebook、训练脚本、数据处理管道 — 每个实验一个项目卡片，井井有条。
+### New Project
 
-### 5. 自由职业者
-同时服务多个客户？每个客户一个项目，命令、路径、产物目录各自独立，互不干扰。
+<p align="center">
+  <img src="docs/screenshots/new-project-en.png" alt="New Project" width="800">
+</p>
+
+> Fill in project name, select path, configure commands — done in seconds.
+
+### Command Execution
+
+<p align="center">
+  <img src="docs/screenshots/command-run-en.png" alt="Command Execution" width="800">
+</p>
+
+> Each command is directly editable, press Enter or click Run to launch in terminal.
+
+### Multi-Language Switching
+
+<p align="center">
+  <img src="docs/screenshots/i18n-en.png" alt="Multi-Language" width="800">
+</p>
+
+> Top-right globe icon to switch languages, interface updates instantly.
 
 ---
 
-## 快速开始
+## Use Cases
 
-### 从源码运行
+### 1. AI Coding Workflow
+Manage multiple Claude Code / Cursor / Copilot projects, each with different launch parameters, enter work mode with one click.
+
+### 2. Full-Stack Developers
+Frontend `npm run dev`, backend `go run main.go`, database `docker compose up` — all in one panel.
+
+### 3. DevOps / Operations
+Deployment scripts, monitoring startup, log viewing — solidify common operations as project commands, even newcomers can operate with one click.
+
+### 4. Data Science
+Jupyter Notebook, training scripts, data processing pipelines — each experiment as a project card, well-organized.
+
+### 5. Freelancers
+Serving multiple clients? Each client as a project, commands, paths, output directories independent, no interference.
+
+---
+
+## Quick Start
+
+### Run from Source
 
 ```bash
 git clone https://github.com/nixyme/Start-Everything.git
@@ -126,7 +126,7 @@ npm install
 npm start
 ```
 
-### 打包安装
+### Build & Install
 
 ```bash
 # macOS (Apple Silicon)
@@ -139,84 +139,84 @@ npm run build:win
 npm run build:linux
 ```
 
-打包产物在 `dist/` 目录下。
+Build artifacts in `dist/` directory.
 
 ---
 
-## 键盘快捷键
+## Keyboard Shortcuts
 
-| 快捷键 | 功能 |
-|--------|------|
-| `⌘N` / `Ctrl+N` | 新建项目 |
-| `⌘F` / `Ctrl+F` | 搜索项目 |
-| `Esc` | 关闭弹窗 |
-| `Enter` | 在命令输入框中执行命令 |
+| Shortcut | Function |
+|----------|----------|
+| `⌘N` / `Ctrl+N` | New Project |
+| `⌘F` / `Ctrl+F` | Search Projects |
+| `Esc` | Close Modal |
+| `Enter` | Execute Command in Input Box |
 
 ---
 
-## 多语言
+## i18n
 
-内置 4 种语言，右上角地球图标一键切换：
+Built-in 4 languages, top-right globe icon to switch:
 
-| 语言 | 代码 |
-|------|------|
+| Language | Code |
+|----------|------|
 | English | `en` |
 | 简体中文 | `zh` |
 | 日本語 | `ja` |
 | Français | `fr` |
 
-自动检测系统语言，也可手动切换并持久化保存。
+Auto-detects system language, can also manually switch and persist.
 
 ---
 
-## 数据存储
+## Data Storage
 
-项目配置自动存储在系统用户数据目录（不在项目目录内）：
+Project configs auto-saved in system user data directory (not in project folder):
 
-| 系统 | 路径 |
-|------|------|
+| System | Path |
+|--------|------|
 | macOS | `~/Library/Application Support/start-everything/data/` |
 | Windows | `%APPDATA%/start-everything/data/` |
 | Linux | `~/.config/start-everything/data/` |
 
-数据变化时自动备份到 `projects_backup.json`，防止意外丢失。
+Auto-backup to `projects_backup.json` on data changes, prevents accidental loss.
 
 ---
 
-## 技术栈
+## Tech Stack
 
-| 组件 | 技术 |
-|------|------|
-| 框架 | Electron 28 |
-| 前端 | HTML / CSS / JavaScript |
-| 数据层 | 纯 Node.js + JSON 文件存储 |
-| 进程通信 | IPC (contextIsolation + preload) |
-| 安全 | CSP 策略 / nodeIntegration 禁用 |
-| 打包 | electron-builder |
+| Component | Technology |
+|-----------|------------|
+| Framework | Electron 28 |
+| Frontend | HTML / CSS / JavaScript |
+| Data Layer | Pure Node.js + JSON file storage |
+| IPC | IPC (contextIsolation + preload) |
+| Security | CSP policy / nodeIntegration disabled |
+| Build | electron-builder |
 
 ---
 
-## 项目结构
+## Project Structure
 
 ```
 Start-Everything/
 ├── src/
 │   ├── main/
-│   │   ├── index.js          # 主进程入口
-│   │   ├── ipc-handlers.js   # IPC 通信处理
-│   │   └── store.js          # 数据持久化 (ProjectStore)
+│   │   ├── index.js          # Main process entry
+│   │   ├── ipc-handlers.js   # IPC communication handlers
+│   │   └── store.js          # Data persistence (ProjectStore)
 │   ├── renderer/
-│   │   ├── index.html        # 界面
-│   │   ├── app.js            # 前端逻辑
-│   │   ├── styles.css        # 暗色主题样式
-│   │   └── i18n.js           # 国际化模块
-│   └── preload.js            # 预加载脚本 (安全桥接)
-├── build/                    # 构建资源 (图标)
-├── docs/                     # 文档与截图
-│   ├── screenshots/          # README 截图
+│   │   ├── index.html        # UI
+│   │   ├── app.js            # Frontend logic
+│   │   ├── styles.css        # Dark theme styles
+│   │   └── i18n.js           # Internationalization module
+│   └── preload.js            # Preload script (security bridge)
+├── build/                    # Build resources (icons)
+├── docs/                     # Documentation & screenshots
+│   ├── screenshots/          # README screenshots
 │   ├── ELECTRON_BEST_PRACTICES.md
 │   └── ELECTRON_ICON_GUIDE.md
-├── run.sh                    # 一键启动脚本
+├── run.sh                    # One-click startup script
 ├── package.json
 └── LICENSE
 ```
@@ -225,7 +225,7 @@ Start-Everything/
 
 ## Contributing
 
-欢迎提交 Issue 和 Pull Request。
+Issues and Pull Requests are welcome.
 
 ---
 

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 图标生成脚本
-生成带有"CC"两个字母的应用图标 (CC-Launcher)
+生成带有"SE"两个字母的应用图标 (Start Everything)
 """
 from PIL import Image, ImageDraw, ImageFont
 import os
@@ -21,16 +21,15 @@ def create_icon():
         img = Image.new('RGBA', (size, size), (0, 0, 0, 0))
         draw = ImageDraw.Draw(img)
 
-        # 绘制圆角矩形背景
-        padding = int(size * 0.08)
+        # 绘制圆角矩形背景（无 padding，填满整个画布）
         radius = int(size * 0.2)
         draw.rounded_rectangle(
-            [padding, padding, size - padding, size - padding],
+            [0, 0, size, size],
             radius=radius,
             fill=bg_color
         )
 
-        # 绘制文字 "CC"
+        # 绘制文字 "SE"
         font_size = int(size * 0.40)
         font = None
 
@@ -68,8 +67,8 @@ def create_icon():
             print("警告: 未找到中文字体，使用默认字体")
             font = ImageFont.load_default()
 
-        # 绘制"CC"文字
-        text = "CC"
+        # 绘制"SE"文字
+        text = "SE"
         bbox = draw.textbbox((0, 0), text, font=font)
         text_width = bbox[2] - bbox[0]
         text_height = bbox[3] - bbox[1]

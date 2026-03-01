@@ -1,7 +1,7 @@
 {
   "name": "start-everything",
   "version": "1.1.4",
-  "description": "Start Everything - Universal launcher for any command, project, or workflow",
+  "description": "START EVERYTHING - Universal launcher for any command, project, or workflow",
   "main": "src/main/index.js",
   "scripts": {
     "start": "electron .",
@@ -27,7 +27,7 @@
   },
   "build": {
     "appId": "com.nixyme.start-everything",
-    "productName": "Start Everything",
+    "productName": "START EVERYTHING",
     "directories": {
       "output": "dist"
     },
@@ -80,7 +80,7 @@
       "category": "Development"
     },
     "dmg": {
-      "title": "Start Everything",
+      "title": "START EVERYTHING",
       "icon": "build/icon.icns",
       "contents": [
         {
