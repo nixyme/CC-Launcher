@@ -35,7 +35,7 @@ class ProjectStore {
       default_command: 'claude --dangerously-skip-permissions',
       result_path: '',
       urls: [
-        { url: 'https://github.com/nixyme/CC-Launcher', name: 'Launcher' },
+        { url: 'https://github.com/nixyme/Start-Everything', name: 'Launcher' },
         { url: 'https://github.com/farion1231/cc-switch', name: 'cc-switch' },
       ],
       pinned: false,
@@ -114,7 +114,7 @@ class ProjectStore {
     return this._loadProjects().find((p) => p.id === id) || null;
   }
 
-  addProject({ name, path: projPath, commands, command_names, command_modes, result_path, urls, pinned }) {
+  addProject({ name, path: projPath, commands, command_names, command_modes, result_path, urls, pinned, folders }) {
     const projects = this._loadProjects();
     if (projects.some((p) => p.name === name)) {
       throw new Error(`Project name '${name}' already exists`);
@@ -132,6 +132,7 @@ class ProjectStore {
       result_path: result_path || '',
       urls: urls || [],
       pinned: pinned || false,
+      folders: folders || [],
       order: 0,
     };
     projects.unshift(project);
@@ -169,6 +170,9 @@ class ProjectStore {
     }
     if (updates.urls !== undefined) {
       project.urls = updates.urls;
+    }
+    if (updates.folders !== undefined) {
+      project.folders = updates.folders;
     }
     if (updates.pinned !== undefined) {
       project.pinned = updates.pinned;
@@ -227,44 +231,77 @@ class ProjectStore {
   importData(data) {
     if (!data?.projects) throw new Error('Invalid import data: missing projects');
     const existing = this._loadProjects();
-    const existingNames = new Set(existing.map(p => p.name));
-    let imported = 0;
-    let skipped = 0;
+    const existingMap = new Map(existing.map(p => [p.name, p]));
+    const importedNames = new Set(data.projects.map(p => p.name).filter(Boolean));
+
+    let added = 0;
+    let updated = 0;
+    let deleted = 0;
     const maxOrder = existing.reduce((max, p) => Math.max(max, p.order || 0), -1);
 
+    // 1. 更新或新增项目
     for (let i = 0; i < data.projects.length; i++) {
       const p = data.projects[i];
-      if (!p.name) { skipped++; continue; }
-      if (existingNames.has(p.name)) { skipped++; continue; }
-      existing.push({
-        id: uuidv4(),
-        name: p.name,
-        path: p.path || '',
-        commands: p.commands || (p.default_command ? [p.default_command] : []),
-        command_names: p.command_names || [],
-        command_modes: p.command_modes || [],
-        default_command: p.default_command || (p.commands?.[0] || ''),
-        result_path: p.result_path || '',
-        urls: p.urls || [],
-        pinned: p.pinned || false,
-        order: p.order !== undefined ? p.order : (maxOrder + 1 + i),
-      });
-      existingNames.add(p.name);
-      imported++;
+      if (!p.name) continue;
+
+      if (existingMap.has(p.name)) {
+        // 更新现有项目
+        const existingProject = existingMap.get(p.name);
+        Object.assign(existingProject, {
+          path: p.path || '',
+          commands: p.commands || (p.default_command ? [p.default_command] : []),
+          command_names: p.command_names || [],
+          command_modes: p.command_modes || [],
+          default_command: p.default_command || (p.commands?.[0] || ''),
+          result_path: p.result_path || '',
+          urls: p.urls || [],
+          pinned: p.pinned !== undefined ? p.pinned : existingProject.pinned,
+          folders: p.folders || [],
+          order: p.order !== undefined ? p.order : existingProject.order,
+        });
+        updated++;
+      } else {
+        // 新增项目
+        const newProject = {
+          id: uuidv4(),
+          name: p.name,
+          path: p.path || '',
+          commands: p.commands || (p.default_command ? [p.default_command] : []),
+          command_names: p.command_names || [],
+          command_modes: p.command_modes || [],
+          default_command: p.default_command || (p.commands?.[0] || ''),
+          result_path: p.result_path || '',
+          urls: p.urls || [],
+          pinned: p.pinned || false,
+          folders: p.folders || [],
+          order: p.order !== undefined ? p.order : (maxOrder + 1 + i),
+        };
+        existing.push(newProject);
+        existingMap.set(p.name, newProject);
+        added++;
+      }
     }
-    this._saveProjects(existing);
+
+    // 2. 删除不在导入数据中的项目
+    const toDelete = existing.filter(p => !importedNames.has(p.name));
+    const finalProjects = existing.filter(p => importedNames.has(p.name));
+    deleted = toDelete.length;
+
+    this._saveProjects(finalProjects);
+
     // Import schedules if present
     if (data.schedules && Array.isArray(data.schedules)) {
-      const existing = this._loadSchedules();
-      const existingIds = new Set(existing.map(s => s.id));
+      const existingSchedules = this._loadSchedules();
+      const existingIds = new Set(existingSchedules.map(s => s.id));
       for (const s of data.schedules) {
         if (s.id && !existingIds.has(s.id)) {
-          existing.push(s);
+          existingSchedules.push(s);
         }
       }
-      this._saveSchedules(existing);
+      this._saveSchedules(existingSchedules);
     }
-    return { imported, skipped };
+
+    return { added, updated, deleted };
   }
 
   updateCommandAtIndex(projectId, index, newCommand) {

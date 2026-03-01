@@ -1,8 +1,8 @@
 <p align="center">
-  <img src="build/icon.png" alt="CC Launcher" width="128" height="128">
+  <img src="build/icon.png" alt="Start Everything" width="128" height="128">
 </p>
 
-<h1 align="center">CC Launcher</h1>
+<h1 align="center">Start Everything</h1>
 
 <p align="center">
   <strong>一个优雅的万能命令启动器，让你一键启动任何应用、脚本和工作流。</strong>
@@ -28,7 +28,7 @@
 
 ## 这不只是 Claude Code 启动器
 
-虽然名字里带着 "CC"，但 CC Launcher 是一个通用的命令启动器。任何能通过终端命令启动的东西，它都能管：
+虽然名字里带着 "Start Everything"，但它是一个通用的命令启动器。任何能通过终端命令启动的东西，它都能管：
 
 | 场景 | 示例命令 |
 |------|---------|
@@ -120,8 +120,8 @@ Jupyter Notebook、训练脚本、数据处理管道 — 每个实验一个项�
 ### 从源码运行
 
 ```bash
-git clone https://github.com/your-username/cc-launcher.git
-cd cc-launcher
+git clone https://github.com/nixyme/Start-Everything.git
+cd Start-Everything
 npm install
 npm start
 ```
@@ -175,9 +175,9 @@ npm run build:linux
 
 | 系统 | 路径 |
 |------|------|
-| macOS | `~/Library/Application Support/cc-launcher/data/` |
-| Windows | `%APPDATA%/cc-launcher/data/` |
-| Linux | `~/.config/cc-launcher/data/` |
+| macOS | `~/Library/Application Support/start-everything/data/` |
+| Windows | `%APPDATA%/start-everything/data/` |
+| Linux | `~/.config/start-everything/data/` |
 
 数据变化时自动备份到 `projects_backup.json`，防止意外丢失。
 
@@ -199,7 +199,7 @@ npm run build:linux
 ## 项目结构
 
 ```
-cc-launcher/
+Start-Everything/
 ├── src/
 │   ├── main/
 │   │   ├── index.js          # 主进程入口

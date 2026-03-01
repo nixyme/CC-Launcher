@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self'; img-src 'self' data:">
-    <title>CC-Launcher</title>
+    <title>Start Everything</title>
     <link rel="stylesheet" href="styles.css">
 </head>
 <body>
@@ -38,7 +38,7 @@
         <div class="main-content">
             <div class="welcome" id="welcomeMessage">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
-                <h1 data-i18n="welcome.title">CC Launcher</h1>
+                <h1 data-i18n="welcome.title">Start Everything</h1>
                 <p data-i18n="welcome.subtitle">Select a project or create a new one</p>
                 <div class="shortcut-hint"><kbd>⌘</kbd> + <kbd>N</kbd> <span data-i18n="welcome.shortcut">to add project</span></div>
                 <div class="shortcut-hint" id="globalShortcutHint" style="display:none;"></div>
@@ -64,8 +64,9 @@
         <div class="form-group"><label data-i18n="modal.projectName">Project Name</label><input type="text" id="modalProjectName" class="form-input" data-i18n-placeholder="modal.projectNamePlaceholder" placeholder="My Project"></div>
         <div class="form-group"><label data-i18n="modal.projectPath">Project Path</label><div class="input-with-button"><input type="text" id="modalProjectPath" class="form-input" data-i18n-placeholder="modal.selectProjectFolder" placeholder="Select project folder" readonly><button id="browseProjectPathBtn" class="btn-browse"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="14" height="14"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg><span data-i18n="modal.browse">Browse</span></button></div></div>
         <div class="form-group"><label data-i18n="modal.commands">Commands</label><div id="commandsList" class="commands-list"></div><button type="button" id="addCommandBtn" class="btn-add-command" data-i18n="modal.addCommand">+ Add Command</button></div>
-        <div class="form-group"><label data-i18n="url.title">URLs</label><div id="urlsList" class="commands-list"></div><button type="button" id="addUrlBtn" class="btn-add-command" data-i18n="url.add">+ Add URL</button></div>
         <div class="form-group"><label data-i18n="modal.outputPath">Output Path</label><div class="input-with-button"><input type="text" id="modalOutputPath" class="form-input" data-i18n-placeholder="modal.selectOutputFolder" placeholder="Select output folder (optional)" readonly><button id="browseOutputPathBtn" class="btn-browse"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="14" height="14"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg><span data-i18n="modal.browse">Browse</span></button></div></div>
+        <div class="form-group"><label data-i18n="url.title">URLs</label><div id="urlsList" class="commands-list"></div><button type="button" id="addUrlBtn" class="btn-add-command" data-i18n="url.add">+ Add URL</button></div>
+        <div class="form-group"><label data-i18n="folder.title">Folders</label><div id="foldersList" class="commands-list"></div><button type="button" id="addFolderBtn" class="btn-add-command" data-i18n="folder.add">+ Add Folder</button></div>
     </div>
     <div class="modal-footer"><button id="cancelModalBtn" class="btn-secondary" data-i18n="modal.cancel">Cancel</button><button id="saveProjectBtn" class="btn-primary" data-i18n="modal.save">Save</button></div>
     </div></div>
@@ -78,6 +79,7 @@
         <div class="settings-group"><div class="settings-item"><div class="settings-item-info"><label data-i18n="settings.update">Software update</label><span class="settings-desc" id="updateStatus" data-i18n="settings.upToDate">You're up to date</span></div><button id="checkUpdateBtn" class="btn-secondary" data-i18n="settings.checkUpdate">Check</button></div></div>
         <div class="settings-group"><div class="settings-item"><div class="settings-item-info"><label data-i18n="settings.data">Data</label><span class="settings-desc" data-i18n="settings.dataDesc">Import or export project data</span></div><div class="settings-actions"><button id="importBtn" class="btn-secondary" data-i18n="settings.import">Import</button><button id="exportBtn" class="btn-secondary" data-i18n="settings.export">Export</button><button id="openDataDirBtn" class="btn-icon-sm" data-i18n-title="settings.openDataDir" title="Open data folder"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="14" height="14"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg></button><button id="resetDataBtn" class="btn-icon-sm btn-icon-danger" data-i18n-title="settings.resetData" title="Reset all data"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="14" height="14"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg></button></div></div></div>
         <div class="settings-group"><div class="settings-item"><div class="settings-item-info"><label data-i18n="settings.version">Version</label><span class="settings-desc" id="appVersion">-</span></div></div></div>
+        <div class="settings-group settings-about"><div class="settings-item"><div class="settings-item-info"><label data-i18n="settings.about">About</label><span class="settings-desc"><a href="#" id="projectUrlLink" class="settings-link">GitHub</a> · <span data-i18n="settings.author">Author</span>: <span data-i18n="settings.authorName">nixy</span> · <span data-i18n="settings.wechat">WeChat</span>: nixynixynixy</span><span class="settings-desc" data-i18n="settings.welcomeMsg">Welcome to chat & PRs are welcome!</span></div></div></div>
     </div>
     </div></div>
     <div id="toastContainer" class="toast-container"></div>

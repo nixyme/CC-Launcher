@@ -110,6 +110,7 @@ function setupEventListeners() {
   document.getElementById('saveProjectBtn').addEventListener('click', saveProject);
   document.getElementById('addCommandBtn').addEventListener('click', addCommandInput);
   document.getElementById('addUrlBtn').addEventListener('click', addUrlInput);
+  document.getElementById('addFolderBtn').addEventListener('click', addFolderInput);
   document.getElementById('settingsBtn').addEventListener('click', openSettings);
   document.getElementById('scheduleLogsBtn').addEventListener('click', openScheduleLogsModal);
 
@@ -432,6 +433,7 @@ function showProjectDetails() {
   loadScheduleCacheForProject(currentProject.id).then(() => {
     renderCommandsDisplay();
     renderUrlBlocks();
+    renderFolderBlocks();
   });
 }
 
@@ -662,6 +664,69 @@ function renderUrlBlocks() {
   detailsContent.appendChild(urlSection);
 }
 
+// === Folder Blocks (Details Page) ===
+function renderFolderBlocks() {
+  const folders = currentProject?.folders || [];
+  let folderSection = document.getElementById('folderBlocksSection');
+  if (folderSection) folderSection.remove();
+  if (folders.length === 0) return;
+
+  const detailsContent = document.querySelector('.details-content');
+  folderSection = document.createElement('div');
+  folderSection.id = 'folderBlocksSection';
+  folderSection.className = 'info-item';
+  const label = document.createElement('label');
+  label.textContent = t('folder.title') || 'Folders';
+  const container = document.createElement('div');
+  container.className = 'url-blocks';
+  folders.forEach((f, index) => {
+    const block = document.createElement('div');
+    block.className = 'url-block folder-block';
+    block.title = f.path;
+    block.draggable = true;
+    block.dataset.folderIndex = index;
+    block.textContent = f.name || f.path.split('/').pop() || f.path;
+    block.addEventListener('click', (e) => {
+      if (block.classList.contains('url-dragging')) return;
+      window.electronAPI.openFolder(f.path);
+    });
+    // Drag reorder
+    block.addEventListener('dragstart', (e) => {
+      block.classList.add('url-dragging');
+      e.dataTransfer.effectAllowed = 'move';
+      e.dataTransfer.setData('text/folder-index', index.toString());
+    });
+    block.addEventListener('dragend', () => {
+      block.classList.remove('url-dragging');
+      container.querySelectorAll('.folder-block').forEach(b => b.classList.remove('url-drag-over'));
+    });
+    block.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+      const dragging = container.querySelector('.url-dragging');
+      if (dragging && dragging !== block) block.classList.add('url-drag-over');
+    });
+    block.addEventListener('dragleave', () => block.classList.remove('url-drag-over'));
+    block.addEventListener('drop', (e) => {
+      e.preventDefault();
+      block.classList.remove('url-drag-over');
+      const fromIdx = parseInt(e.dataTransfer.getData('text/folder-index'));
+      const toIdx = parseInt(block.dataset.folderIndex);
+      if (isNaN(fromIdx) || isNaN(toIdx) || fromIdx === toIdx) return;
+      const newFolders = [...folders];
+      const [moved] = newFolders.splice(fromIdx, 1);
+      newFolders.splice(toIdx, 0, moved);
+      currentProject.folders = newFolders;
+      window.electronAPI.updateProject(currentProject.id, { folders: newFolders });
+      renderFolderBlocks();
+    });
+    container.appendChild(block);
+  });
+  folderSection.appendChild(label);
+  folderSection.appendChild(container);
+  detailsContent.appendChild(folderSection);
+}
+
 function extractDomain(url) {
   try {
     const u = new URL(url);
@@ -681,12 +746,14 @@ function openModal(editMode = false, project = null) {
     document.getElementById('modalOutputPath').value = project.result_path;
     renderCommandInputs(project.commands || [], project.command_names || [], project.command_modes || []);
     renderUrlInputs(project.urls || []);
+    renderFolderInputs(project.folders || []);
   } else {
     document.getElementById('modalProjectName').value = '';
     document.getElementById('modalProjectPath').value = '';
     document.getElementById('modalOutputPath').value = '';
     renderCommandInputs(['claude --dangerously-skip-permissions '], [''], ['terminal']);
     renderUrlInputs([]);
+    renderFolderInputs([]);
   }
   projectModal.classList.add('show');
   // Focus first input after animation
@@ -803,6 +870,55 @@ function addUrlInput() {
   addUrlInputWithValue('', '');
 }
 
+// === Folder Inputs (Modal) ===
+function renderFolderInputs(folders = []) {
+  const list = document.getElementById('foldersList');
+  list.innerHTML = '';
+  folders.forEach(f => addFolderInputWithValue(f.path || '', f.name || ''));
+}
+
+function addFolderInputWithValue(folderPath = '', name = '') {
+  const list = document.getElementById('foldersList');
+  const item = document.createElement('div');
+  item.className = 'command-item';
+  const pathInput = document.createElement('input');
+  pathInput.type = 'text';
+  pathInput.className = 'form-input';
+  pathInput.placeholder = '/path/to/folder';
+  pathInput.value = folderPath;
+  pathInput.readOnly = true;
+  const nameInput = document.createElement('input');
+  nameInput.type = 'text';
+  nameInput.className = 'form-input command-name-field';
+  nameInput.placeholder = t('folder.name') || 'Name';
+  nameInput.value = name;
+  const browseBtn = document.createElement('button');
+  browseBtn.type = 'button';
+  browseBtn.className = 'btn-browse';
+  browseBtn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="14" height="14"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>';
+  browseBtn.addEventListener('click', async () => {
+    const result = await window.electronAPI.selectFolder();
+    if (!result.canceled) {
+      pathInput.value = result.path;
+      if (!nameInput.value) nameInput.value = result.path.split('/').pop() || '';
+    }
+  });
+  const removeBtn = document.createElement('button');
+  removeBtn.type = 'button';
+  removeBtn.className = 'btn-remove-command';
+  removeBtn.innerHTML = icons.x;
+  removeBtn.addEventListener('click', () => item.remove());
+  item.appendChild(pathInput);
+  item.appendChild(nameInput);
+  item.appendChild(browseBtn);
+  item.appendChild(removeBtn);
+  list.appendChild(item);
+}
+
+function addFolderInput() {
+  addFolderInputWithValue('', '');
+}
+
 function closeModal() { projectModal.classList.remove('show'); }
 
 // === CRUD ===
@@ -842,14 +958,24 @@ async function saveProject() {
     if (urlVal) urls.push({ url: urlVal, name: urlName });
   });
 
+  // Collect Folders
+  const folderItems = document.querySelectorAll('#foldersList .command-item');
+  const folders = [];
+  folderItems.forEach(item => {
+    const inputs = item.querySelectorAll('input');
+    const folderPath = inputs[0].value.trim();
+    const folderName = inputs[1] ? inputs[1].value.trim() : '';
+    if (folderPath) folders.push({ path: folderPath, name: folderName });
+  });
+
   let result;
   if (isEditMode && currentProject) {
     result = await window.electronAPI.updateProject(currentProject.id, {
-      name, path: projPath, commands, command_names: commandNames, command_modes: commandModes, result_path: outputPath, urls,
+      name, path: projPath, commands, command_names: commandNames, command_modes: commandModes, result_path: outputPath, urls, folders,
     });
   } else {
     result = await window.electronAPI.addProject({
-      name, path: projPath, commands, command_names: commandNames, command_modes: commandModes, result_path: outputPath, urls,
+      name, path: projPath, commands, command_names: commandNames, command_modes: commandModes, result_path: outputPath, urls, folders,
     });
   }
 
@@ -931,7 +1057,7 @@ async function quickExportSettings() {
     showToast(t('msg.exported'), 'success');
   } else {
     // 没有上次路径或写入失败，走弹窗流程
-    const saveResult = await window.electronAPI.saveFile(jsonStr, 'cc-launcher-settings.json');
+    const saveResult = await window.electronAPI.saveFile(jsonStr, 'start-everything-settings.json');
     if (!saveResult.canceled) showToast(t('msg.exported'), 'success');
   }
 }
@@ -940,7 +1066,7 @@ async function exportSettings() {
   const result = await window.electronAPI.exportProjects();
   if (!result.success) { showToast(t('msg.exportFailed') + ': ' + result.error, 'error'); return; }
   const jsonStr = JSON.stringify(result.data, null, 2);
-  const saveResult = await window.electronAPI.saveFile(jsonStr, 'cc-launcher-settings.json');
+  const saveResult = await window.electronAPI.saveFile(jsonStr, 'start-everything-settings.json');
   if (!saveResult.canceled) showToast(t('msg.exported'), 'success');
 }
 
@@ -951,7 +1077,8 @@ async function importSettings() {
   try { data = JSON.parse(fileResult.data); } catch { showToast(t('msg.invalidJson'), 'error'); return; }
   const result = await window.electronAPI.importProjects(data);
   if (result.success) {
-    showToast(t('msg.imported', { imported: result.data.imported, skipped: result.data.skipped }), 'success');
+    const { added, updated, deleted } = result.data;
+    showToast(t('msg.imported', { added, updated, deleted }), 'success');
     await loadProjects();
   } else {
     showToast(t('msg.importFailed') + ': ' + result.error, 'error');
@@ -1167,6 +1294,12 @@ function setupSettings() {
   // Open data directory
   document.getElementById('openDataDirBtn').addEventListener('click', async () => {
     await window.electronAPI.openDataDir();
+  });
+
+  // Project URL link
+  document.getElementById('projectUrlLink').addEventListener('click', (e) => {
+    e.preventDefault();
+    window.electronAPI.openUrl('https://github.com/nixyme/Start-Everything');
   });
 
   // Reset data

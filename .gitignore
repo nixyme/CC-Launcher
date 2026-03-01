@@ -17,10 +17,11 @@ Thumbs.db
 # User data (stored in system userData, never in project)
 data/
 *.json.bak
-cc-launcher-settings.json
+start-everything-settings.json
 
 # Tool-specific
 .serena/
+.claude/
 
 # Keep build assets
 !build/icon.*

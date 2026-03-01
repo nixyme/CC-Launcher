@@ -405,7 +405,7 @@ end tell`;
     const lastPath = store.getSetting('lastExportPath');
     const result = await dialog.showSaveDialog(win, {
       title: 'Export Settings',
-      defaultPath: lastPath || defaultName || 'cc-launcher-settings.json',
+      defaultPath: lastPath || defaultName || 'start-everything-settings.json',
       filters: [{ name: 'JSON Files', extensions: ['json'] }],
     });
     if (result.canceled) return { canceled: true };
@@ -580,8 +580,8 @@ end tell`;
     return new Promise((resolve) => {
       const opts = {
         hostname: 'api.github.com',
-        path: '/repos/nixyme/CC-Launcher/releases/latest',
-        headers: { 'User-Agent': 'CC-Launcher/' + currentVersion },
+        path: '/repos/nixyme/Start-Everything/releases/latest',
+        headers: { 'User-Agent': 'Start-Everything/' + currentVersion },
       };
       https.get(opts, (res) => {
         let data = '';
@@ -627,9 +627,9 @@ end tell`;
     const https = require('https');
     const http = require('http');
     const os = require('os');
-    const tmpDir = path.join(os.tmpdir(), 'cc-launcher-update');
+    const tmpDir = path.join(os.tmpdir(), 'start-everything-update');
     if (!fs.existsSync(tmpDir)) fs.mkdirSync(tmpDir, { recursive: true });
-    const fileName = url.split('/').pop() || 'CC-Launcher-update.dmg';
+    const fileName = url.split('/').pop() || 'Start-Everything-update.dmg';
     const filePath = path.join(tmpDir, fileName);
     const win = getMainWindow();
 
@@ -640,7 +640,7 @@ end tell`;
           return;
         }
         const mod = downloadUrl.startsWith('https') ? https : http;
-        mod.get(downloadUrl, { headers: { 'User-Agent': 'CC-Launcher/' + app.getVersion() } }, (res) => {
+        mod.get(downloadUrl, { headers: { 'User-Agent': 'Start-Everything/' + app.getVersion() } }, (res) => {
           // 跟随重定向
           if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
             doDownload(res.headers.location, redirectCount + 1);
@@ -653,17 +653,27 @@ end tell`;
           const totalBytes = parseInt(res.headers['content-length'] || '0', 10);
           let downloaded = 0;
           const file = fs.createWriteStream(filePath);
+          let lastPercent = 0;
           res.on('data', (chunk) => {
             downloaded += chunk.length;
             file.write(chunk);
             if (win && !win.isDestroyed() && totalBytes > 0) {
               const percent = Math.round((downloaded / totalBytes) * 100);
-              win.webContents.send('update-download-progress', { percent, downloaded, total: totalBytes });
+              // 节流：每变化 1% 才发送，避免过于频繁
+              if (percent > lastPercent) {
+                lastPercent = percent;
+                win.webContents.send('update-download-progress', { percent, downloaded, total: totalBytes });
+              }
             }
           });
           res.on('end', () => {
-            file.end();
-            resolve({ success: true, filePath });
+            file.end(() => {
+              // 确保发送 100%
+              if (win && !win.isDestroyed()) {
+                win.webContents.send('update-download-progress', { percent: 100, downloaded: totalBytes || downloaded, total: totalBytes || downloaded });
+              }
+              resolve({ success: true, filePath });
+            });
           });
           res.on('error', (e) => {
             file.end();
@@ -677,14 +687,52 @@ end tell`;
     });
   });
 
-  // 打开已下载的 DMG 并退出应用
+  // 自动安装：挂载 DMG → 复制 .app 到 /Applications → 卸载 → 重启
   ipcMain.handle('install-update', async (_event, filePath) => {
+    const { execSync } = require('child_process');
     try {
       if (!filePath || !fs.existsSync(filePath)) {
         return { success: false, error: 'DMG file not found' };
       }
-      spawn('open', [filePath], { detached: true });
-      setTimeout(() => app.quit(), 1500);
+
+      // 1. 挂载 DMG，解析挂载点
+      const mountOutput = execSync(`hdiutil attach "${filePath}" -nobrowse -noverify -noautoopen 2>&1`, { encoding: 'utf-8' });
+      const mountMatch = mountOutput.match(/\/Volumes\/.+/);
+      if (!mountMatch) {
+        return { success: false, error: 'Failed to mount DMG: ' + mountOutput };
+      }
+      const mountPoint = mountMatch[0].trim();
+
+      // 2. 找到 .app
+      const items = fs.readdirSync(mountPoint);
+      const appName = items.find(f => f.endsWith('.app'));
+      if (!appName) {
+        execSync(`hdiutil detach "${mountPoint}" -force 2>/dev/null`);
+        return { success: false, error: 'No .app found in DMG' };
+      }
+
+      const srcApp = path.join(mountPoint, appName);
+      const destApp = path.join('/Applications', appName);
+
+      // 3. 删除旧版本，复制新版本
+      if (fs.existsSync(destApp)) {
+        execSync(`rm -rf "${destApp}"`);
+      }
+      execSync(`cp -R "${srcApp}" "/Applications/"`);
+
+      // 4. 移除 quarantine 属性
+      execSync(`xattr -cr "${destApp}" 2>/dev/null || true`);
+
+      // 5. 卸载 DMG
+      execSync(`hdiutil detach "${mountPoint}" -force 2>/dev/null || true`);
+
+      // 6. 清理下载文件
+      try { fs.unlinkSync(filePath); } catch { /* ignore */ }
+
+      // 7. 重启应用
+      spawn('open', ['-n', destApp], { detached: true, stdio: 'ignore' }).unref();
+      setTimeout(() => app.quit(), 800);
+
       return { success: true };
     } catch (e) {
       return { success: false, error: e.message };

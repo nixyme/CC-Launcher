@@ -868,6 +868,13 @@ textarea.form-input {
   border-color: var(--accent);
   box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.3);
 }
+.folder-block {
+  color: #10b981;
+}
+.folder-block:hover {
+  background: rgba(16, 185, 129, 0.1);
+  border-color: #10b981;
+}
 
 /* === Fast Tooltip === */
 .has-tooltip {
@@ -921,6 +928,14 @@ textarea.form-input {
 .settings-desc {
   font-size: 12px;
   color: var(--text-muted);
+}
+.settings-link {
+  color: var(--accent);
+  text-decoration: none;
+  cursor: pointer;
+}
+.settings-link:hover {
+  text-decoration: underline;
 }
 
 /* Toggle Switch */

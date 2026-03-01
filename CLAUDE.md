@@ -2,7 +2,7 @@
 
 ## 项目概述
 
-CC 万能启动器是一个纯 Electron 桌面应用，用于管理和启动 Claude Code 项目。
+Start Everything 是一个纯 Electron 桌面应用，用于管理和启动任何命令行项目。
 
 ## 技术栈
 
@@ -13,7 +13,7 @@ CC 万能启动器是一个纯 Electron 桌面应用，用于管理和启动 Cla
 ## 项目结构
 
 ```
-cc-launcher/
+Start-Everything/
 ├── src/
 │   ├── main/
 │   │   ├── index.js          # 主进程入口
