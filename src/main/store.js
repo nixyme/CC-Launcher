@@ -114,7 +114,7 @@ class ProjectStore {
     return this._loadProjects().find((p) => p.id === id) || null;
   }
 
-  addProject({ name, path: projPath, commands, command_names, command_modes, result_path, urls, pinned, folders }) {
+  addProject({ name, path: projPath, commands, command_names, command_modes, result_path, urls, pinned, folders, files }) {
     const projects = this._loadProjects();
     if (projects.some((p) => p.name === name)) {
       throw new Error(`Project name '${name}' already exists`);
@@ -133,6 +133,7 @@ class ProjectStore {
       urls: urls || [],
       pinned: pinned || false,
       folders: folders || [],
+      files: files || [],
       order: 0,
     };
     projects.unshift(project);
@@ -173,6 +174,9 @@ class ProjectStore {
     }
     if (updates.folders !== undefined) {
       project.folders = updates.folders;
+    }
+    if (updates.files !== undefined) {
+      project.files = updates.files;
     }
     if (updates.pinned !== undefined) {
       project.pinned = updates.pinned;
@@ -257,6 +261,7 @@ class ProjectStore {
           urls: p.urls || [],
           pinned: p.pinned !== undefined ? p.pinned : existingProject.pinned,
           folders: p.folders || [],
+          files: p.files || [],
           order: p.order !== undefined ? p.order : existingProject.order,
         });
         updated++;
@@ -274,6 +279,7 @@ class ProjectStore {
           urls: p.urls || [],
           pinned: p.pinned || false,
           folders: p.folders || [],
+          files: p.files || [],
           order: p.order !== undefined ? p.order : (maxOrder + 1 + i),
         };
         existing.push(newProject);

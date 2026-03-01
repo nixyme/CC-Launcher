@@ -1369,3 +1369,39 @@ textarea.form-input {
   margin-bottom: 16px;
 }
 .log-header h3 { font-size: 16px; font-weight: 600; color: var(--text-primary); }
+
+/* === Quick Action Buttons === */
+.quick-action-btn {
+  margin-right: 8px;
+}
+
+@keyframes highlight-pulse {
+  0%, 100% {
+    background-color: transparent;
+  }
+  50% {
+    background-color: rgba(59, 130, 246, 0.15);
+  }
+}
+
+/* === Quick Add Button === */
+.add-url-btn {
+  background: rgba(59, 130, 246, 0.1) !important;
+  border: 2px dashed rgba(59, 130, 246, 0.3) !important;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+}
+
+.add-url-btn:hover {
+  background: rgba(59, 130, 246, 0.2) !important;
+  border-color: rgba(59, 130, 246, 0.5) !important;
+  transform: scale(1.05);
+}
+
+.add-url-btn svg {
+  opacity: 0.6;
+}
+

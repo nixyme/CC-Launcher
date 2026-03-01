@@ -23,6 +23,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // 打开配置目录
   openDataDir: () => ipcRenderer.invoke('open-data-dir'),
+  // 获取最近导入/导出目录
+  getLastImportExportDir: () => ipcRenderer.invoke('get-last-import-export-dir'),
   // 重置数据
   resetData: () => ipcRenderer.invoke('reset-data'),
 
@@ -38,6 +40,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   selectFolder: () => ipcRenderer.invoke('select-folder'),
   selectFile: (defaultPath) => ipcRenderer.invoke('select-file', defaultPath),
   checkPathType: (filePath) => ipcRenderer.invoke('check-path-type', filePath),
+
+  // 文件操作（使用默认应用打开）
+  openFileWithDefault: (filePath) => ipcRenderer.invoke('open-file-with-default', filePath),
 
   // 文件对话框
   saveFile: (data, defaultName) => ipcRenderer.invoke('save-file', { data, defaultName }),

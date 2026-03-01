@@ -111,6 +111,76 @@ function setupEventListeners() {
   document.getElementById('addCommandBtn').addEventListener('click', addCommandInput);
   document.getElementById('addUrlBtn').addEventListener('click', addUrlInput);
   document.getElementById('addFolderBtn').addEventListener('click', addFolderInput);
+  document.getElementById('addFileBtn').addEventListener('click', addFileInput);
+
+  // Drag and drop support for Add Folder button
+  const addFolderBtn = document.getElementById('addFolderBtn');
+  addFolderBtn.addEventListener('dragover', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    addFolderBtn.style.opacity = '0.7';
+    addFolderBtn.style.transform = 'scale(1.05)';
+  });
+  addFolderBtn.addEventListener('dragleave', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    addFolderBtn.style.opacity = '';
+    addFolderBtn.style.transform = '';
+  });
+  addFolderBtn.addEventListener('drop', async (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    addFolderBtn.style.opacity = '';
+    addFolderBtn.style.transform = '';
+
+    const files = e.dataTransfer.files;
+    if (files.length > 0) {
+      for (let i = 0; i < files.length; i++) {
+        const filePath = files[i].path;
+        const pathInfo = await window.electronAPI.checkPathType(filePath);
+        if (pathInfo && pathInfo.isDirectory) {
+          const folderName = filePath.split('/').pop() || '';
+          addFolderInputWithValue(filePath, folderName);
+        }
+      }
+    }
+  });
+
+  // Drag and drop support for Add File button
+  const addFileBtn = document.getElementById('addFileBtn');
+  addFileBtn.addEventListener('dragover', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    addFileBtn.style.opacity = '0.7';
+    addFileBtn.style.transform = 'scale(1.05)';
+  });
+  addFileBtn.addEventListener('dragleave', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    addFileBtn.style.opacity = '';
+    addFileBtn.style.transform = '';
+  });
+  addFileBtn.addEventListener('drop', async (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    addFileBtn.style.opacity = '';
+    addFileBtn.style.transform = '';
+
+    const files = e.dataTransfer.files;
+    if (files.length > 0) {
+      for (let i = 0; i < files.length; i++) {
+        const filePath = files[i].path;
+        const pathInfo = await window.electronAPI.checkPathType(filePath);
+        // 支持所有类型：普通文件、.app 应用、符号链接等
+        // 只排除不存在的路径
+        if (pathInfo && pathInfo.exists) {
+          const fileName = filePath.split('/').pop() || '';
+          addFileInputWithValue(filePath, fileName);
+        }
+      }
+    }
+  });
+
   document.getElementById('settingsBtn').addEventListener('click', openSettings);
   document.getElementById('scheduleLogsBtn').addEventListener('click', openScheduleLogsModal);
 
@@ -195,6 +265,115 @@ function setupEventListeners() {
   }
 }
 
+function navigateProjectList(key) {
+  // Get all visible project items in the DOM (both pinned and unpinned)
+  const pinnedItems = Array.from(document.querySelectorAll('.pinned-item'));
+  const projectItems = Array.from(document.querySelectorAll('.project-item'));
+
+  if (pinnedItems.length === 0 && projectItems.length === 0) return;
+
+  // Find currently selected item
+  const selectedPinned = document.querySelector('.pinned-item.active');
+  const selectedProject = document.querySelector('.project-item.active');
+  const selectedItem = selectedPinned || selectedProject;
+
+  let nextItem = null;
+
+  if (selectedPinned) {
+    // Currently in pinned grid (3 columns)
+    const currentIndex = pinnedItems.indexOf(selectedPinned);
+    const cols = 3;
+    const currentRow = Math.floor(currentIndex / cols);
+    const currentCol = currentIndex % cols;
+    const totalRows = Math.ceil(pinnedItems.length / cols);
+
+    if (key === 'ArrowLeft') {
+      // Move left in the same row
+      if (currentCol > 0) {
+        nextItem = pinnedItems[currentIndex - 1];
+      } else {
+        // Wrap to end of previous row
+        const prevRowLastIndex = currentIndex - 1;
+        if (prevRowLastIndex >= 0) {
+          nextItem = pinnedItems[prevRowLastIndex];
+        }
+      }
+    } else if (key === 'ArrowRight') {
+      // Move right in the same row
+      if (currentCol < cols - 1 && currentIndex + 1 < pinnedItems.length) {
+        nextItem = pinnedItems[currentIndex + 1];
+      } else {
+        // Wrap to start of next row or first unpinned item
+        if (currentRow < totalRows - 1 && currentIndex + 1 < pinnedItems.length) {
+          nextItem = pinnedItems[currentIndex + 1];
+        } else if (projectItems.length > 0) {
+          nextItem = projectItems[0];
+        }
+      }
+    } else if (key === 'ArrowUp') {
+      // Move up one row
+      const upIndex = currentIndex - cols;
+      if (upIndex >= 0) {
+        nextItem = pinnedItems[upIndex];
+      } else {
+        // Wrap to last row
+        const lastRowStartIndex = (totalRows - 1) * cols;
+        const targetIndex = lastRowStartIndex + currentCol;
+        nextItem = pinnedItems[Math.min(targetIndex, pinnedItems.length - 1)];
+      }
+    } else if (key === 'ArrowDown') {
+      // Move down one row
+      const downIndex = currentIndex + cols;
+      if (downIndex < pinnedItems.length) {
+        nextItem = pinnedItems[downIndex];
+      } else if (projectItems.length > 0) {
+        // Move to first unpinned item
+        nextItem = projectItems[0];
+      } else {
+        // Wrap to first row
+        nextItem = pinnedItems[currentCol] || pinnedItems[0];
+      }
+    }
+  } else if (selectedProject) {
+    // Currently in unpinned list
+    const currentIndex = projectItems.indexOf(selectedProject);
+
+    if (key === 'ArrowDown' || key === 'ArrowRight') {
+      if (currentIndex < projectItems.length - 1) {
+        nextItem = projectItems[currentIndex + 1];
+      } else if (pinnedItems.length > 0) {
+        // Wrap to first pinned item
+        nextItem = pinnedItems[0];
+      } else {
+        // Wrap to first unpinned item
+        nextItem = projectItems[0];
+      }
+    } else if (key === 'ArrowUp' || key === 'ArrowLeft') {
+      if (currentIndex > 0) {
+        nextItem = projectItems[currentIndex - 1];
+      } else if (pinnedItems.length > 0) {
+        // Move to last pinned item
+        nextItem = pinnedItems[pinnedItems.length - 1];
+      } else {
+        // Wrap to last unpinned item
+        nextItem = projectItems[projectItems.length - 1];
+      }
+    }
+  } else {
+    // No selection, select first item
+    nextItem = pinnedItems[0] || projectItems[0];
+  }
+
+  if (nextItem) {
+    const projectId = nextItem.dataset.projectId;
+    const project = projects.find(p => p.id === projectId);
+    if (project) {
+      selectProject(project);
+      nextItem.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+  }
+}
+
 function setupKeyboardShortcuts() {
   document.addEventListener('keydown', (e) => {
     // Cmd/Ctrl + N: New project
@@ -231,6 +410,15 @@ function setupKeyboardShortcuts() {
     if ((e.metaKey || e.ctrlKey) && e.key === 'f') {
       e.preventDefault();
       searchInput.focus();
+    }
+    // Arrow keys: Navigate project list
+    if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) {
+      // Only handle if not in input/textarea and no modal is open
+      if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+      if (projectModal.classList.contains('show') || settingsModal.classList.contains('show')) return;
+
+      e.preventDefault();
+      navigateProjectList(e.key);
     }
   });
 }
@@ -426,6 +614,10 @@ function showProjectDetails() {
       renderProjectList();
     }
   };
+
+  // Quick action buttons for URLs and Folders
+  renderQuickActionButtons();
+
   // Hide output path section if empty
   const outputSection = document.getElementById('outputPathSection');
   if (outputSection) outputSection.style.display = currentProject.result_path ? '' : 'none';
@@ -434,6 +626,7 @@ function showProjectDetails() {
     renderCommandsDisplay();
     renderUrlBlocks();
     renderFolderBlocks();
+    renderFileBlocks();
   });
 }
 
@@ -629,39 +822,124 @@ function renderUrlBlocks() {
     });
     // Drag reorder
     block.addEventListener('dragstart', (e) => {
+      console.log('[URL Drag] === DRAG START ===');
+      console.log('[URL Drag] Dragging URL:', u.name || extractDomain(u.url));
+      console.log('[URL Drag] From index:', index);
+      console.log('[URL Drag] Current URLs array:', urls.map((url, i) => `${i}: ${url.name || extractDomain(url.url)}`));
       block.classList.add('url-dragging');
       e.dataTransfer.effectAllowed = 'move';
       e.dataTransfer.setData('text/url-index', index.toString());
+      e.dataTransfer.setData('text/drag-type', 'url'); // 标记类型
     });
     block.addEventListener('dragend', () => {
       block.classList.remove('url-dragging');
       container.querySelectorAll('.url-block').forEach(b => b.classList.remove('url-drag-over'));
     });
     block.addEventListener('dragover', (e) => {
-      e.preventDefault();
-      e.dataTransfer.dropEffect = 'move';
+      // 只接受 URL 类型的拖放
       const dragging = container.querySelector('.url-dragging');
-      if (dragging && dragging !== block) block.classList.add('url-drag-over');
+      if (!dragging) return; // 不是 URL 拖放，忽略
+      e.preventDefault();
+      e.stopPropagation();
+      e.dataTransfer.dropEffect = 'move';
+      if (dragging !== block) block.classList.add('url-drag-over');
     });
     block.addEventListener('dragleave', () => block.classList.remove('url-drag-over'));
     block.addEventListener('drop', (e) => {
       e.preventDefault();
+      e.stopPropagation();
       block.classList.remove('url-drag-over');
+
+      console.log('[URL Drag] === DROP EVENT ===');
+      console.log('[URL Drag] Dropped on block:', block.textContent);
+      console.log('[URL Drag] Block dataset.urlIndex:', block.dataset.urlIndex);
+
+      // 检查是否是 URL 类型
+      const dragType = e.dataTransfer.getData('text/drag-type');
+      console.log('[URL Drag] Drag type:', dragType);
+      if (dragType !== 'url') {
+        console.log('[URL Drag] Not a URL drag, ignoring');
+        return;
+      }
+
       const fromIdx = parseInt(e.dataTransfer.getData('text/url-index'));
+      console.log('[URL Drag] From index (from dataTransfer):', fromIdx);
+      if (isNaN(fromIdx)) {
+        console.log('[URL Drag] Invalid fromIdx, aborting');
+        return;
+      }
+
+      // 使用 dataset 中的原始索引（这是正确的）
       const toIdx = parseInt(block.dataset.urlIndex);
-      if (isNaN(fromIdx) || isNaN(toIdx) || fromIdx === toIdx) return;
+      console.log('[URL Drag] To index (from dataset):', toIdx);
+      console.log('[URL Drag] Current URLs before reorder:', urls.map((url, i) => `${i}: ${url.name || extractDomain(url.url)}`));
+
+      if (isNaN(toIdx) || fromIdx === toIdx) {
+        console.log('[URL Drag] Invalid toIdx or same position, aborting');
+        return;
+      }
+
+      // 正确的拖放排序逻辑
       const newUrls = [...urls];
+      console.log('[URL Drag] Step 1 - Copy array:', newUrls.map((url, i) => `${i}: ${url.name || extractDomain(url.url)}`));
+
       const [moved] = newUrls.splice(fromIdx, 1);
-      newUrls.splice(toIdx, 0, moved);
+      console.log('[URL Drag] Step 2 - After splice(fromIdx, 1):', newUrls.map((url, i) => `${i}: ${url.name || extractDomain(url.url)}`));
+      console.log('[URL Drag] Moved item:', moved.name || extractDomain(moved.url));
+
+      // 如果目标位置在源位置之后，删除源元素后索引会前移，需要调整
+      const adjustedToIdx = toIdx > fromIdx ? toIdx - 1 : toIdx;
+      console.log('[URL Drag] Adjusted toIdx:', adjustedToIdx, '(original:', toIdx, ', fromIdx:', fromIdx, ')');
+
+      newUrls.splice(adjustedToIdx, 0, moved);
+      console.log('[URL Drag] Step 3 - After splice(adjustedToIdx, 0, moved):', newUrls.map((url, i) => `${i}: ${url.name || extractDomain(url.url)}`));
+
       currentProject.urls = newUrls;
       window.electronAPI.updateProject(currentProject.id, { urls: newUrls });
+      console.log('[URL Drag] === REORDERING COMPLETE, CALLING renderUrlBlocks() ===');
       renderUrlBlocks();
     });
     container.appendChild(block);
   });
+
+  // Add quick add button
+  const addBtn = document.createElement('button');
+  addBtn.className = 'url-block add-url-btn';
+  addBtn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>';
+  addBtn.title = t('url.add') || '+ Add URL';
+  addBtn.addEventListener('click', () => {
+    openModal(true, currentProject);
+    setTimeout(() => {
+      // Auto add a new URL input
+      addUrlInput();
+      // Scroll to the URLs section
+      setTimeout(() => {
+        const urlsSection = document.getElementById('urlsList');
+        if (urlsSection) {
+          const lastInput = urlsSection.querySelector('.command-item:last-child input');
+          if (lastInput) {
+            lastInput.focus();
+            lastInput.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          }
+        }
+      }, 100);
+    }, 250);
+  });
+  container.appendChild(addBtn);
+
   urlSection.appendChild(label);
   urlSection.appendChild(container);
-  detailsContent.appendChild(urlSection);
+
+  // 插入到正确位置：URL 应该在 Folder 和 File 之前
+  const folderSection = document.getElementById('folderBlocksSection');
+  const fileSection = document.getElementById('fileBlocksSection');
+  if (folderSection) {
+    detailsContent.insertBefore(urlSection, folderSection);
+  } else if (fileSection) {
+    detailsContent.insertBefore(urlSection, fileSection);
+  } else {
+    detailsContent.appendChild(urlSection);
+  }
 }
 
 // === Folder Blocks (Details Page) ===
@@ -687,44 +965,380 @@ function renderFolderBlocks() {
     block.dataset.folderIndex = index;
     block.textContent = f.name || f.path.split('/').pop() || f.path;
     block.addEventListener('click', (e) => {
-      if (block.classList.contains('url-dragging')) return;
+      if (block.classList.contains('folder-dragging')) return;
       window.electronAPI.openFolder(f.path);
     });
     // Drag reorder
     block.addEventListener('dragstart', (e) => {
-      block.classList.add('url-dragging');
+      console.log('[Folder Drag] === DRAG START ===');
+      console.log('[Folder Drag] Dragging folder:', f.name || f.path.split('/').pop());
+      console.log('[Folder Drag] From index:', index);
+      console.log('[Folder Drag] Current folders array:', folders.map((folder, i) => `${i}: ${folder.name || folder.path.split('/').pop()}`));
+      block.classList.add('folder-dragging');
       e.dataTransfer.effectAllowed = 'move';
       e.dataTransfer.setData('text/folder-index', index.toString());
+      e.dataTransfer.setData('text/drag-type', 'folder'); // 标记类型
     });
     block.addEventListener('dragend', () => {
-      block.classList.remove('url-dragging');
-      container.querySelectorAll('.folder-block').forEach(b => b.classList.remove('url-drag-over'));
+      block.classList.remove('folder-dragging');
+      container.querySelectorAll('.folder-block').forEach(b => b.classList.remove('folder-drag-over'));
     });
     block.addEventListener('dragover', (e) => {
+      // 只接受文件夹类型的拖放
+      const dragging = container.querySelector('.folder-dragging');
+      if (!dragging) return; // 不是文件夹拖放，忽略
       e.preventDefault();
+      e.stopPropagation();
       e.dataTransfer.dropEffect = 'move';
-      const dragging = container.querySelector('.url-dragging');
-      if (dragging && dragging !== block) block.classList.add('url-drag-over');
+      if (dragging !== block) block.classList.add('folder-drag-over');
     });
-    block.addEventListener('dragleave', () => block.classList.remove('url-drag-over'));
+    block.addEventListener('dragleave', () => block.classList.remove('folder-drag-over'));
     block.addEventListener('drop', (e) => {
       e.preventDefault();
-      block.classList.remove('url-drag-over');
+      e.stopPropagation();
+      block.classList.remove('folder-drag-over');
+
+      console.log('[Folder Drag] === DROP EVENT ===');
+      console.log('[Folder Drag] Dropped on block:', block.textContent);
+      console.log('[Folder Drag] Block dataset.folderIndex:', block.dataset.folderIndex);
+
+      // 检查是否是文件夹类型
+      const dragType = e.dataTransfer.getData('text/drag-type');
+      console.log('[Folder Drag] Drag type:', dragType);
+      if (dragType !== 'folder') {
+        console.log('[Folder Drag] Not a folder drag, ignoring');
+        return;
+      }
+
       const fromIdx = parseInt(e.dataTransfer.getData('text/folder-index'));
+      console.log('[Folder Drag] From index (from dataTransfer):', fromIdx);
+      if (isNaN(fromIdx)) {
+        console.log('[Folder Drag] Invalid fromIdx, aborting');
+        return;
+      }
+
+      // 使用 dataset 中的原始索引
       const toIdx = parseInt(block.dataset.folderIndex);
-      if (isNaN(fromIdx) || isNaN(toIdx) || fromIdx === toIdx) return;
+      console.log('[Folder Drag] To index (from dataset):', toIdx);
+      console.log('[Folder Drag] Current folders before reorder:', folders.map((folder, i) => `${i}: ${folder.name || folder.path.split('/').pop()}`));
+
+      if (isNaN(toIdx) || fromIdx === toIdx) {
+        console.log('[Folder Drag] Invalid toIdx or same position, aborting');
+        return;
+      }
+
+      // 正确的拖放排序逻辑
       const newFolders = [...folders];
+      console.log('[Folder Drag] Step 1 - Copy array:', newFolders.map((folder, i) => `${i}: ${folder.name || folder.path.split('/').pop()}`));
+
       const [moved] = newFolders.splice(fromIdx, 1);
-      newFolders.splice(toIdx, 0, moved);
+      console.log('[Folder Drag] Step 2 - After splice(fromIdx, 1):', newFolders.map((folder, i) => `${i}: ${folder.name || folder.path.split('/').pop()}`));
+      console.log('[Folder Drag] Moved item:', moved.name || moved.path.split('/').pop());
+
+      const adjustedToIdx = toIdx > fromIdx ? toIdx - 1 : toIdx;
+      console.log('[Folder Drag] Adjusted toIdx:', adjustedToIdx, '(original:', toIdx, ', fromIdx:', fromIdx, ')');
+
+      newFolders.splice(adjustedToIdx, 0, moved);
+      console.log('[Folder Drag] Step 3 - After splice(adjustedToIdx, 0, moved):', newFolders.map((folder, i) => `${i}: ${folder.name || folder.path.split('/').pop()}`));
+
       currentProject.folders = newFolders;
       window.electronAPI.updateProject(currentProject.id, { folders: newFolders });
+      console.log('[Folder Drag] === REORDERING COMPLETE, CALLING renderFolderBlocks() ===');
       renderFolderBlocks();
     });
     container.appendChild(block);
   });
+
+  // Add quick add button
+  const addBtn = document.createElement('button');
+  addBtn.className = 'url-block add-url-btn';
+  addBtn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>';
+  addBtn.title = t('folder.add') || '+ Add Folder';
+  addBtn.addEventListener('click', () => {
+    openModal(true, currentProject);
+    setTimeout(() => {
+      // Auto add a new folder input
+      addFolderInput();
+      // Scroll to the Folders section and focus the new input
+      setTimeout(() => {
+        const foldersSection = document.getElementById('foldersList');
+        if (foldersSection) {
+          const lastItem = foldersSection.querySelector('.command-item:last-child');
+          if (lastItem) {
+            // Focus on the name input (second input in the item)
+            const nameInput = lastItem.querySelectorAll('input')[1];
+            if (nameInput) {
+              nameInput.focus();
+              nameInput.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }
+          }
+        }
+      }, 100);
+    }, 250);
+  });
+
+  // Drag and drop support for Add Folder button
+  addBtn.addEventListener('dragover', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    console.log('[Drag] Dragover on folder add button');
+    addBtn.style.opacity = '0.7';
+    addBtn.style.transform = 'scale(1.1)';
+    addBtn.style.borderColor = 'rgba(59, 130, 246, 0.8)';
+  });
+  addBtn.addEventListener('dragleave', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    console.log('[Drag] Dragleave on folder add button');
+    addBtn.style.opacity = '';
+    addBtn.style.transform = '';
+    addBtn.style.borderColor = '';
+  });
+  addBtn.addEventListener('drop', async (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    console.log('[Drag] Drop on folder add button', e.dataTransfer.files);
+    addBtn.style.opacity = '';
+    addBtn.style.transform = '';
+    addBtn.style.borderColor = '';
+
+    const files = e.dataTransfer.files;
+    if (files.length > 0) {
+      const newFolders = [];
+      for (let i = 0; i < files.length; i++) {
+        const filePath = files[i].path;
+        console.log('[Drag] Checking path:', filePath);
+        const pathInfo = await window.electronAPI.checkPathType(filePath);
+        console.log('[Drag] Path info:', pathInfo);
+        if (pathInfo && pathInfo.isDirectory) {
+          const folderName = filePath.split('/').pop() || '';
+          newFolders.push({ path: filePath, name: folderName });
+        }
+      }
+      console.log('[Drag] New folders to add:', newFolders);
+      if (newFolders.length > 0) {
+        const updatedFolders = [...(currentProject.folders || []), ...newFolders];
+        currentProject.folders = updatedFolders;
+        await window.electronAPI.updateProject(currentProject.id, { folders: updatedFolders });
+        renderFolderBlocks();
+        showToast(`Added ${newFolders.length} folder(s)`, 'success');
+      }
+    }
+  });
+
+  container.appendChild(addBtn);
+
   folderSection.appendChild(label);
   folderSection.appendChild(container);
-  detailsContent.appendChild(folderSection);
+
+  // 插入到正确位置：Folder 应该在 URL 之后、File 之前
+  const fileSection = document.getElementById('fileBlocksSection');
+  if (fileSection) {
+    detailsContent.insertBefore(folderSection, fileSection);
+  } else {
+    detailsContent.appendChild(folderSection);
+  }
+}
+
+// === File Blocks (Details Page) ===
+function renderFileBlocks() {
+  const files = currentProject?.files || [];
+  let fileSection = document.getElementById('fileBlocksSection');
+  if (fileSection) fileSection.remove();
+  if (files.length === 0) return;
+
+  const detailsContent = document.querySelector('.details-content');
+  fileSection = document.createElement('div');
+  fileSection.id = 'fileBlocksSection';
+  fileSection.className = 'info-item';
+  const label = document.createElement('label');
+  label.textContent = t('file.title') || 'Files';
+  const container = document.createElement('div');
+  container.className = 'url-blocks';
+  files.forEach((f, index) => {
+    const block = document.createElement('div');
+    block.className = 'url-block file-block';
+    block.title = f.path;
+    block.draggable = true;
+    block.dataset.fileIndex = index;
+    block.textContent = f.name || f.path.split('/').pop() || f.path;
+    block.addEventListener('click', (e) => {
+      if (block.classList.contains('file-dragging')) return;
+      window.electronAPI.openFileWithDefault(f.path);
+    });
+    // Drag reorder
+    block.addEventListener('dragstart', (e) => {
+      console.log('[File Drag] === DRAG START ===');
+      console.log('[File Drag] Dragging file:', f.name || f.path.split('/').pop());
+      console.log('[File Drag] From index:', index);
+      console.log('[File Drag] Current files array:', files.map((file, i) => `${i}: ${file.name || file.path.split('/').pop()}`));
+      block.classList.add('file-dragging');
+      e.dataTransfer.effectAllowed = 'move';
+      e.dataTransfer.setData('text/file-index', index.toString());
+      e.dataTransfer.setData('text/drag-type', 'file'); // 标记类型
+    });
+    block.addEventListener('dragend', () => {
+      block.classList.remove('file-dragging');
+      container.querySelectorAll('.file-block').forEach(b => b.classList.remove('file-drag-over'));
+    });
+    block.addEventListener('dragover', (e) => {
+      // 只接受文件类型的拖放
+      const dragging = container.querySelector('.file-dragging');
+      if (!dragging) return; // 不是文件拖放，忽略
+      e.preventDefault();
+      e.stopPropagation();
+      e.dataTransfer.dropEffect = 'move';
+      if (dragging !== block) block.classList.add('file-drag-over');
+    });
+    block.addEventListener('dragleave', () => block.classList.remove('file-drag-over'));
+    block.addEventListener('drop', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      block.classList.remove('file-drag-over');
+
+      console.log('[File Drag] === DROP EVENT ===');
+      console.log('[File Drag] Dropped on block:', block.textContent);
+      console.log('[File Drag] Block dataset.fileIndex:', block.dataset.fileIndex);
+
+      // 检查是否是文件类型
+      const dragType = e.dataTransfer.getData('text/drag-type');
+      console.log('[File Drag] Drag type:', dragType);
+      if (dragType !== 'file') {
+        console.log('[File Drag] Not a file drag, ignoring');
+        return;
+      }
+
+      const fromIdx = parseInt(e.dataTransfer.getData('text/file-index'));
+      console.log('[File Drag] From index (from dataTransfer):', fromIdx);
+      if (isNaN(fromIdx)) {
+        console.log('[File Drag] Invalid fromIdx, aborting');
+        return;
+      }
+
+      // 使用 dataset 中的原始索引
+      const toIdx = parseInt(block.dataset.fileIndex);
+      console.log('[File Drag] To index (from dataset):', toIdx);
+      console.log('[File Drag] Current files before reorder:', files.map((file, i) => `${i}: ${file.name || file.path.split('/').pop()}`));
+
+      if (isNaN(toIdx) || fromIdx === toIdx) {
+        console.log('[File Drag] Invalid toIdx or same position, aborting');
+        return;
+      }
+
+      // 正确的拖放排序逻辑
+      const newFiles = [...files];
+      console.log('[File Drag] Step 1 - Copy array:', newFiles.map((file, i) => `${i}: ${file.name || file.path.split('/').pop()}`));
+
+      const [moved] = newFiles.splice(fromIdx, 1);
+      console.log('[File Drag] Step 2 - After splice(fromIdx, 1):', newFiles.map((file, i) => `${i}: ${file.name || file.path.split('/').pop()}`));
+      console.log('[File Drag] Moved item:', moved.name || moved.path.split('/').pop());
+
+      const adjustedToIdx = toIdx > fromIdx ? toIdx - 1 : toIdx;
+      console.log('[File Drag] Adjusted toIdx:', adjustedToIdx, '(original:', toIdx, ', fromIdx:', fromIdx, ')');
+
+      newFiles.splice(adjustedToIdx, 0, moved);
+      console.log('[File Drag] Step 3 - After splice(adjustedToIdx, 0, moved):', newFiles.map((file, i) => `${i}: ${file.name || file.path.split('/').pop()}`));
+
+      currentProject.files = newFiles;
+      window.electronAPI.updateProject(currentProject.id, { files: newFiles });
+      console.log('[File Drag] === REORDERING COMPLETE, CALLING renderFileBlocks() ===');
+      renderFileBlocks();
+    });
+    container.appendChild(block);
+  });
+
+  // Add quick add button
+  const addBtn = document.createElement('button');
+  addBtn.className = 'url-block add-url-btn';
+  addBtn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>';
+  addBtn.title = t('file.add') || '+ Add File';
+  addBtn.addEventListener('click', () => {
+    openModal(true, currentProject);
+    setTimeout(() => {
+      // Auto add a new file input
+      addFileInput();
+      // Scroll to the Files section and focus the new input
+      setTimeout(() => {
+        const filesSection = document.getElementById('filesList');
+        if (filesSection) {
+          const lastItem = filesSection.querySelector('.command-item:last-child');
+          if (lastItem) {
+            // Focus on the name input (second input in the item)
+            const nameInput = lastItem.querySelectorAll('input')[1];
+            if (nameInput) {
+              nameInput.focus();
+              nameInput.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }
+          }
+        }
+      }, 100);
+    }, 250);
+  });
+
+  // Drag and drop support for adding files
+  container.addEventListener('dragover', (e) => {
+    // 检查是否是内部拖放排序
+    const hasFiles = e.dataTransfer.types.includes('Files');
+    const hasDragType = e.dataTransfer.types.includes('text/drag-type');
+
+    // 如果有 drag-type 标记，说明是内部拖放排序，不处理
+    if (hasDragType) return;
+
+    // 只有从外部拖入文件时才处理
+    if (!hasFiles) return;
+
+    e.preventDefault();
+    e.stopPropagation();
+    container.style.opacity = '0.7';
+  });
+  container.addEventListener('dragleave', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    container.style.opacity = '';
+  });
+  container.addEventListener('drop', async (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    container.style.opacity = '';
+
+    // 检查是否是内部拖放排序
+    const dragType = e.dataTransfer.getData('text/drag-type');
+    if (dragType) return; // 内部拖放排序，不处理
+
+    const droppedFiles = e.dataTransfer.files;
+    if (droppedFiles.length > 0) {
+      const newFiles = [];
+      for (let i = 0; i < droppedFiles.length; i++) {
+        const filePath = droppedFiles[i].path;
+        const pathInfo = await window.electronAPI.checkPathType(filePath);
+        // 支持所有类型：普通文件、.app 应用、符号链接等
+        // 只排除不存在的路径
+        if (pathInfo && pathInfo.exists) {
+          const fileName = filePath.split('/').pop() || '';
+          newFiles.push({ path: filePath, name: fileName });
+        }
+      }
+      console.log('[Drag] New files to add:', newFiles);
+      if (newFiles.length > 0) {
+        const updatedFiles = [...(currentProject.files || []), ...newFiles];
+        currentProject.files = updatedFiles;
+        await window.electronAPI.updateProject(currentProject.id, { files: updatedFiles });
+        renderFileBlocks();
+        showToast(`Added ${newFiles.length} file(s)`, 'success');
+      }
+    }
+  });
+
+  container.appendChild(addBtn);
+
+  fileSection.appendChild(label);
+  fileSection.appendChild(container);
+  detailsContent.appendChild(fileSection);
+}
+
+// === Quick Action Buttons (Header) - No longer used ===
+function renderQuickActionButtons() {
+  // Quick add buttons are now inline with URL/Folder blocks
 }
 
 function extractDomain(url) {
@@ -747,6 +1361,7 @@ function openModal(editMode = false, project = null) {
     renderCommandInputs(project.commands || [], project.command_names || [], project.command_modes || []);
     renderUrlInputs(project.urls || []);
     renderFolderInputs(project.folders || []);
+    renderFileInputs(project.files || []);
   } else {
     document.getElementById('modalProjectName').value = '';
     document.getElementById('modalProjectPath').value = '';
@@ -776,11 +1391,26 @@ function addCommandInputWithValue(value = '', name = '', mode = 'terminal') {
   input.className = 'form-input';
   input.placeholder = 'claude --dangerously-skip-permissions ...';
   input.value = value;
+
+  // 自动保存：命令输入框失焦时保存
+  input.addEventListener('blur', () => {
+    if (isEditMode && currentProject) {
+      autoSaveProject();
+    }
+  });
+
   const nameInput = document.createElement('input');
   nameInput.type = 'text';
   nameInput.className = 'form-input command-name-field';
   nameInput.placeholder = t('modal.cmdName') || 'Name';
   nameInput.value = name;
+
+  // 自动保存：名称输入框失焦时保存
+  nameInput.addEventListener('blur', () => {
+    if (isEditMode && currentProject) {
+      autoSaveProject();
+    }
+  });
 
   // Mode toggle for modal
   const modeBtn = document.createElement('button');
@@ -796,6 +1426,10 @@ function addCommandInputWithValue(value = '', name = '', mode = 'terminal') {
     modeBtn.innerHTML = newMode === 'silent' ? icons.silent : icons.terminal;
     modeBtn.title = newMode === 'silent' ? t('mode.clickToTerminal') : t('mode.clickToSilent');
     modeBtn.classList.toggle('mode-silent', newMode === 'silent');
+    // 自动保存：模式切换时保存
+    if (isEditMode && currentProject) {
+      autoSaveProject();
+    }
   });
 
   const browseBtn = document.createElement('button');
@@ -807,12 +1441,13 @@ function addCommandInputWithValue(value = '', name = '', mode = 'terminal') {
     const projectPath = document.getElementById('modalProjectPath').value.trim();
     const result = await window.electronAPI.selectFile(projectPath || undefined);
     if (!result.canceled && result.path) {
-      let filePath = result.path;
-      if (projectPath && filePath.startsWith(projectPath + '/')) {
-        filePath = './' + filePath.slice(projectPath.length + 1);
-      }
-      input.value = filePath;
+      // 使用绝对路径，不转换为相对路径
+      input.value = result.path;
       input.focus();
+      // 自动保存
+      if (isEditMode && currentProject) {
+        autoSaveProject();
+      }
     }
   });
   const removeBtn = document.createElement('button');
@@ -821,6 +1456,10 @@ function addCommandInputWithValue(value = '', name = '', mode = 'terminal') {
   removeBtn.innerHTML = icons.x;
   removeBtn.addEventListener('click', () => {
     item.remove();
+    // 自动保存
+    if (isEditMode && currentProject) {
+      autoSaveProject();
+    }
   });
   item.appendChild(input);
   item.appendChild(nameInput);
@@ -850,16 +1489,38 @@ function addUrlInputWithValue(url = '', name = '') {
   urlInput.className = 'form-input';
   urlInput.placeholder = 'https://...';
   urlInput.value = url;
+
+  // 自动保存：URL 输入框失焦时保存
+  urlInput.addEventListener('blur', () => {
+    if (isEditMode && currentProject) {
+      autoSaveProject();
+    }
+  });
+
   const nameInput = document.createElement('input');
   nameInput.type = 'text';
   nameInput.className = 'form-input command-name-field';
   nameInput.placeholder = t('url.name') || 'Name';
   nameInput.value = name;
+
+  // 自动保存：名称输入框失焦时保存
+  nameInput.addEventListener('blur', () => {
+    if (isEditMode && currentProject) {
+      autoSaveProject();
+    }
+  });
+
   const removeBtn = document.createElement('button');
   removeBtn.type = 'button';
   removeBtn.className = 'btn-remove-command';
   removeBtn.innerHTML = icons.x;
-  removeBtn.addEventListener('click', () => item.remove());
+  removeBtn.addEventListener('click', () => {
+    item.remove();
+    // 自动保存
+    if (isEditMode && currentProject) {
+      autoSaveProject();
+    }
+  });
   item.appendChild(urlInput);
   item.appendChild(nameInput);
   item.appendChild(removeBtn);
@@ -892,6 +1553,14 @@ function addFolderInputWithValue(folderPath = '', name = '') {
   nameInput.className = 'form-input command-name-field';
   nameInput.placeholder = t('folder.name') || 'Name';
   nameInput.value = name;
+
+  // 自动保存：名称输入框失焦时保存
+  nameInput.addEventListener('blur', () => {
+    if (isEditMode && currentProject) {
+      autoSaveProject();
+    }
+  });
+
   const browseBtn = document.createElement('button');
   browseBtn.type = 'button';
   browseBtn.className = 'btn-browse';
@@ -901,13 +1570,23 @@ function addFolderInputWithValue(folderPath = '', name = '') {
     if (!result.canceled) {
       pathInput.value = result.path;
       if (!nameInput.value) nameInput.value = result.path.split('/').pop() || '';
+      // 自动保存
+      if (isEditMode && currentProject) {
+        autoSaveProject();
+      }
     }
   });
   const removeBtn = document.createElement('button');
   removeBtn.type = 'button';
   removeBtn.className = 'btn-remove-command';
   removeBtn.innerHTML = icons.x;
-  removeBtn.addEventListener('click', () => item.remove());
+  removeBtn.addEventListener('click', () => {
+    item.remove();
+    // 自动保存
+    if (isEditMode && currentProject) {
+      autoSaveProject();
+    }
+  });
   item.appendChild(pathInput);
   item.appendChild(nameInput);
   item.appendChild(browseBtn);
@@ -919,7 +1598,172 @@ function addFolderInput() {
   addFolderInputWithValue('', '');
 }
 
+// === File Inputs (Modal) ===
+function renderFileInputs(files = []) {
+  const list = document.getElementById('filesList');
+  list.innerHTML = '';
+  files.forEach(f => addFileInputWithValue(f.path || '', f.name || ''));
+}
+
+function addFileInputWithValue(filePath = '', name = '') {
+  const list = document.getElementById('filesList');
+  const item = document.createElement('div');
+  item.className = 'command-item';
+  const pathInput = document.createElement('input');
+  pathInput.type = 'text';
+  pathInput.className = 'form-input';
+  pathInput.placeholder = '/path/to/file';
+  pathInput.value = filePath;
+  pathInput.readOnly = true;
+  const nameInput = document.createElement('input');
+  nameInput.type = 'text';
+  nameInput.className = 'form-input command-name-field';
+  nameInput.placeholder = t('file.name') || 'Name';
+  nameInput.value = name;
+
+  // 自动保存：名称输入框失焦时保存
+  nameInput.addEventListener('blur', () => {
+    if (isEditMode && currentProject) {
+      autoSaveProject();
+    }
+  });
+
+  const browseBtn = document.createElement('button');
+  browseBtn.type = 'button';
+  browseBtn.className = 'btn-browse';
+  browseBtn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="14" height="14"><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><polyline points="13 2 13 9 20 9"/></svg>';
+  browseBtn.addEventListener('click', async () => {
+    const result = await window.electronAPI.selectFile(pathInput.value || undefined);
+    if (!result.canceled) {
+      pathInput.value = result.path;
+      if (!nameInput.value) {
+        nameInput.value = result.path.split('/').pop() || '';
+      }
+      // 自动保存
+      if (isEditMode && currentProject) {
+        autoSaveProject();
+      }
+    }
+  });
+  const removeBtn = document.createElement('button');
+  removeBtn.type = 'button';
+  removeBtn.className = 'btn-remove-command';
+  removeBtn.innerHTML = icons.x;
+  removeBtn.addEventListener('click', () => {
+    item.remove();
+    // 自动保存
+    if (isEditMode && currentProject) {
+      autoSaveProject();
+    }
+  });
+  item.appendChild(pathInput);
+  item.appendChild(nameInput);
+  item.appendChild(browseBtn);
+  item.appendChild(removeBtn);
+  list.appendChild(item);
+}
+
+function addFileInput() {
+  addFileInputWithValue('', '');
+}
+
 function closeModal() { projectModal.classList.remove('show'); }
+
+// === Auto Save ===
+let autoSaveTimeout = null;
+async function autoSaveProject() {
+  // 防抖：500ms 内只保存一次
+  if (autoSaveTimeout) clearTimeout(autoSaveTimeout);
+  autoSaveTimeout = setTimeout(async () => {
+    if (!isEditMode || !currentProject) return;
+
+    try {
+      const name = document.getElementById('modalProjectName').value.trim();
+      const projPath = document.getElementById('modalProjectPath').value.trim();
+      const outputPath = document.getElementById('modalOutputPath').value.trim();
+
+      // 收集命令
+      const commandItems = document.querySelectorAll('#commandsList .command-item');
+      const commands = [];
+      const commandNames = [];
+      const commandModes = [];
+      commandItems.forEach(item => {
+        const inputs = item.querySelectorAll('input');
+        const cmd = inputs[0].value.trim();
+        const name = inputs[1] ? inputs[1].value.trim() : '';
+        const modeBtn = item.querySelector('.btn-mode-toggle-modal');
+        const mode = modeBtn ? modeBtn.dataset.mode : 'terminal';
+        if (cmd) {
+          commands.push(cmd);
+          commandNames.push(name);
+          commandModes.push(mode);
+        }
+      });
+
+      // 收集 URLs
+      const urlItems = document.querySelectorAll('#urlsList .command-item');
+      const urls = [];
+      urlItems.forEach(item => {
+        const inputs = item.querySelectorAll('input');
+        const urlVal = inputs[0].value.trim();
+        const urlName = inputs[1] ? inputs[1].value.trim() : '';
+        if (urlVal) urls.push({ url: urlVal, name: urlName });
+      });
+
+      // 收集 Folders
+      const folderItems = document.querySelectorAll('#foldersList .command-item');
+      const folders = [];
+      folderItems.forEach(item => {
+        const inputs = item.querySelectorAll('input');
+        const folderPath = inputs[0].value.trim();
+        const folderName = inputs[1] ? inputs[1].value.trim() : '';
+        if (folderPath) folders.push({ path: folderPath, name: folderName });
+      });
+
+      // 收集 Files
+      const fileItems = document.querySelectorAll('#filesList .command-item');
+      const files = [];
+      fileItems.forEach(item => {
+        const inputs = item.querySelectorAll('input');
+        const filePath = inputs[0].value.trim();
+        const fileName = inputs[1] ? inputs[1].value.trim() : '';
+        if (filePath) files.push({ path: filePath, name: fileName });
+      });
+
+      const result = await window.electronAPI.updateProject(currentProject.id, {
+        name, path: projPath, commands, command_names: commandNames, command_modes: commandModes,
+        result_path: outputPath, urls, folders, files,
+      });
+
+      if (result.success) {
+        // 更新当前项目数据
+        Object.assign(currentProject, result.data);
+        // 更新项目列表中的数据
+        const idx = projects.findIndex(p => p.id === currentProject.id);
+        if (idx !== -1) projects[idx] = currentProject;
+        // 轻量级反馈：短暂显示保存图标
+        showAutoSaveIndicator();
+        // 刷新详情页显示
+        renderProjectList();
+        selectProject(currentProject);
+      }
+    } catch (e) {
+      console.error('Auto save failed:', e);
+    }
+  }, 500);
+}
+
+function showAutoSaveIndicator() {
+  const saveBtn = document.getElementById('saveProjectBtn');
+  if (!saveBtn) return;
+  const originalText = saveBtn.innerHTML;
+  saveBtn.innerHTML = icons.check + '<span>' + (t('msg.projectUpdated') || 'Saved') + '</span>';
+  saveBtn.style.opacity = '0.7';
+  setTimeout(() => {
+    saveBtn.innerHTML = originalText;
+    saveBtn.style.opacity = '';
+  }, 1000);
+}
 
 // === CRUD ===
 async function saveProject() {
@@ -968,14 +1812,24 @@ async function saveProject() {
     if (folderPath) folders.push({ path: folderPath, name: folderName });
   });
 
+  // Collect Files
+  const fileItems = document.querySelectorAll('#filesList .command-item');
+  const files = [];
+  fileItems.forEach(item => {
+    const inputs = item.querySelectorAll('input');
+    const filePath = inputs[0].value.trim();
+    const fileName = inputs[1] ? inputs[1].value.trim() : '';
+    if (filePath) files.push({ path: filePath, name: fileName });
+  });
+
   let result;
   if (isEditMode && currentProject) {
     result = await window.electronAPI.updateProject(currentProject.id, {
-      name, path: projPath, commands, command_names: commandNames, command_modes: commandModes, result_path: outputPath, urls, folders,
+      name, path: projPath, commands, command_names: commandNames, command_modes: commandModes, result_path: outputPath, urls, folders, files,
     });
   } else {
     result = await window.electronAPI.addProject({
-      name, path: projPath, commands, command_names: commandNames, command_modes: commandModes, result_path: outputPath, urls, folders,
+      name, path: projPath, commands, command_names: commandNames, command_modes: commandModes, result_path: outputPath, urls, folders, files,
     });
   }
 
@@ -1293,7 +2147,10 @@ function setupSettings() {
 
   // Open data directory
   document.getElementById('openDataDirBtn').addEventListener('click', async () => {
-    await window.electronAPI.openDataDir();
+    const result = await window.electronAPI.getLastImportExportDir();
+    if (result.success && result.path) {
+      await window.electronAPI.openFolder(result.path);
+    }
   });
 
   // Project URL link
@@ -1321,8 +2178,39 @@ function setupSettings() {
   });
 
   document.getElementById('autoLaunchToggle').addEventListener('change', async (e) => {
-    await window.electronAPI.setAutoLaunch(e.target.checked);
-    showToast(e.target.checked ? t('settings.autoLaunchOn') : t('settings.autoLaunchOff'), 'success');
+    try {
+      const result = await window.electronAPI.setAutoLaunch(e.target.checked);
+      console.log('[Auto Launch] Result:', result);
+
+      // Always verify with get to ensure accuracy
+      const actualValue = await window.electronAPI.getAutoLaunch();
+      console.log('[Auto Launch] Actual value:', actualValue);
+
+      if (actualValue !== e.target.checked) {
+        // Setting failed, revert the toggle
+        e.target.checked = actualValue;
+
+        // Check if we're in development mode
+        const version = await window.electronAPI.getAppVersion();
+        if (version.includes('dev') || !result.success) {
+          showToast((t('settings.autoLaunchDevMode') || 'Auto-launch only works in production builds. Please build and install the app first.'), 'warning');
+        } else {
+          showToast(t('settings.autoLaunchFailed') || 'Failed to update auto-launch setting', 'error');
+        }
+      } else {
+        showToast(e.target.checked ? (t('settings.autoLaunchOn') || 'Auto-launch enabled') : (t('settings.autoLaunchOff') || 'Auto-launch disabled'), 'success');
+      }
+    } catch (error) {
+      console.error('[Auto Launch] Error:', error);
+      showToast((t('settings.autoLaunchFailed') || 'Failed to update auto-launch setting') + ': ' + error.message, 'error');
+      // Revert toggle
+      try {
+        const actualValue = await window.electronAPI.getAutoLaunch();
+        e.target.checked = actualValue;
+      } catch (e2) {
+        console.error('[Auto Launch] Failed to get actual value:', e2);
+      }
+    }
   });
 
   document.getElementById('checkUpdateBtn').addEventListener('click', async () => {

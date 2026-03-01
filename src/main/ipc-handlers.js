@@ -22,7 +22,8 @@ function isRegisteredProject(store, projectPath) {
 
 // 智能处理命令路径：自动补 ./ 并给含空格的路径加单引号
 // 返回 shell 安全的命令字符串
-function normalizeCommandPath(command, projectPath) {
+// mode: 'terminal' 或 'silent'，用于区分终端模式和静默模式
+function normalizeCommandPath(command, projectPath, mode = 'terminal') {
   // 已经被引号包裹的，不处理
   if (command.startsWith('"') || command.startsWith("'")) return command;
 
@@ -36,12 +37,42 @@ function normalizeCommandPath(command, projectPath) {
     if (!candidate.startsWith('/') && !candidate.startsWith('./') && !candidate.startsWith('~')) {
       const fullPath = path.join(projectPath, candidate);
       if (fs.existsSync(fullPath)) {
+        // macOS .app 应用：终端模式使用 open，静默模式执行内部可执行文件
+        if (fullPath.endsWith('.app')) {
+          if (mode === 'terminal') {
+            return `open '${fullPath.replace(/'/g, "'\\''")}'` + rest;
+          } else {
+            // 静默模式：尝试执行 .app 内部的可执行文件
+            const appName = path.basename(fullPath, '.app');
+            const execPath = path.join(fullPath, 'Contents', 'MacOS', appName);
+            if (fs.existsSync(execPath)) {
+              return `'${execPath.replace(/'/g, "'\\''")}'` + rest;
+            }
+            // 如果找不到可执行文件，还是用 open
+            return `open '${fullPath.replace(/'/g, "'\\''")}'` + rest;
+          }
+        }
         const safePath = './' + candidate.replace(/'/g, "'\\''");
         return "'" + safePath + "'" + rest;
       }
     } else {
       // 绝对路径或 ./ 开头
       if (fs.existsSync(candidate)) {
+        // macOS .app 应用：终端模式使用 open，静默模式执行内部可执行文件
+        if (candidate.endsWith('.app')) {
+          if (mode === 'terminal') {
+            return `open '${candidate.replace(/'/g, "'\\''")}'` + rest;
+          } else {
+            // 静默模式：尝试执行 .app 内部的可执行文件
+            const appName = path.basename(candidate, '.app');
+            const execPath = path.join(candidate, 'Contents', 'MacOS', appName);
+            if (fs.existsSync(execPath)) {
+              return `'${execPath.replace(/'/g, "'\\''")}'` + rest;
+            }
+            // 如果找不到可执行文件，还是用 open
+            return `open '${candidate.replace(/'/g, "'\\''")}'` + rest;
+          }
+        }
         if (candidate.includes(' ')) {
           const safePath = candidate.replace(/'/g, "'\\''");
           return "'" + safePath + "'" + rest;
@@ -170,8 +201,8 @@ function registerIpcHandlers(store, autoUpdater, getMainWindow, scheduler) {
       const terminal = store.getSetting('terminal') || 'default';
       let proc;
 
-      // 智能处理命令中的文件路径：自动补 ./ 和引号
-      command = normalizeCommandPath(command, workDir);
+      // 智能处理命令中的文件路径：自动补 ./ 和引号（终端模式）
+      command = normalizeCommandPath(command, workDir, 'terminal');
 
       if (platform === 'darwin') {
         if (terminal === 'kaku') {
@@ -265,14 +296,15 @@ end tell`;
       }
       const workDir = resolveWorkDir(projectPath);
 
-      command = normalizeCommandPath(command, workDir);
+      command = normalizeCommandPath(command, workDir, 'silent');
 
       const startTime = new Date().toISOString();
       const MAX_OUTPUT = 10 * 1024;
       let stdout = '';
       let stderr = '';
 
-      const proc = spawn('bash', ['-c', `cd '${workDir.replace(/'/g, "'\\''")}' && ${command}`], {
+      // 使用登录 shell 以加载完整环境变量
+      const proc = spawn('zsh', ['-l', '-c', `cd '${workDir.replace(/'/g, "'\\''")}' && ${command}`], {
         detached: false,
         stdio: ['ignore', 'pipe', 'pipe'],
         env: { ...process.env, ELECTRON_RUN_AS_NODE: undefined },
@@ -378,6 +410,18 @@ end tell`;
     return { success: true };
   });
 
+  // --- 文件操作（使用默认应用打开文件）---
+  ipcMain.handle('open-file-with-default', async (_event, filePath) => {
+    if (!fs.existsSync(filePath)) {
+      return { success: false, error: 'File does not exist' };
+    }
+    const result = await shell.openPath(filePath);
+    if (result) {
+      return { success: false, error: result };
+    }
+    return { success: true };
+  });
+
   ipcMain.handle('select-file', async (_event, defaultPath) => {
     const win = BrowserWindow.getFocusedWindow();
     const opts = {
@@ -477,6 +521,20 @@ end tell`;
     }
   });
 
+  // --- Get Last Import/Export Directory ---
+  ipcMain.handle('get-last-import-export-dir', () => {
+    const path = require('path');
+    const lastImportPath = store.getSetting('lastImportPath');
+    const lastExportPath = store.getSetting('lastExportPath');
+
+    // 优先使用最近的导出路径，其次是导入路径，最后回退到数据目录
+    const targetPath = lastExportPath || lastImportPath;
+    if (targetPath) {
+      return { success: true, path: path.dirname(targetPath) };
+    }
+    return { success: true, path: store.dataDir };
+  });
+
   // --- Reset Data ---
   ipcMain.handle('reset-data', () => {
     try {
@@ -573,12 +631,32 @@ end tell`;
 
   // --- Settings: Auto Launch ---
   ipcMain.handle('get-auto-launch', () => {
-    return app.getLoginItemSettings().openAtLogin;
+    const settings = app.getLoginItemSettings();
+    console.log('[Auto Launch] Get:', settings.openAtLogin);
+    return settings.openAtLogin;
   });
 
   ipcMain.handle('set-auto-launch', (_event, enabled) => {
-    app.setLoginItemSettings({ openAtLogin: enabled });
-    return { success: true };
+    console.log('[Auto Launch] Set:', enabled);
+    console.log('[Auto Launch] App path:', app.getPath('exe'));
+    console.log('[Auto Launch] Is packaged:', app.isPackaged);
+
+    // In development mode, auto-launch may not work
+    if (!app.isPackaged) {
+      console.log('[Auto Launch] Warning: Auto-launch may not work in development mode');
+    }
+
+    app.setLoginItemSettings({
+      openAtLogin: enabled,
+      openAsHidden: false,
+      path: app.getPath('exe')
+    });
+
+    // Verify the setting was applied
+    const settings = app.getLoginItemSettings();
+    console.log('[Auto Launch] Verified:', settings);
+
+    return { success: true, value: settings.openAtLogin };
   });
 
   // --- App Info ---
