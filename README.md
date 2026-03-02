@@ -141,6 +141,16 @@ npm run build:linux
 
 Build artifacts in `dist/` directory.
 
+### macOS: "App Is Damaged" or Cannot Be Opened
+
+Since the app is not signed with an Apple Developer certificate, macOS Gatekeeper will block it. This is expected for community-built apps. Run the following command to fix it:
+
+```bash
+sudo xattr -rd com.apple.quarantine /Applications/Start\ Everything.app
+```
+
+Then open the app normally. You only need to do this once.
+
 ---
 
 ## Keyboard Shortcuts

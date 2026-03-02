@@ -112,6 +112,7 @@ function setupEventListeners() {
   document.getElementById('addUrlBtn').addEventListener('click', addUrlInput);
   document.getElementById('addFolderBtn').addEventListener('click', addFolderInput);
   document.getElementById('addFileBtn').addEventListener('click', addFileInput);
+  document.getElementById('addSubprojectBtn').addEventListener('click', addSubprojectInput);
 
   // Drag and drop support for Add Folder button
   const addFolderBtn = document.getElementById('addFolderBtn');
@@ -627,6 +628,7 @@ function showProjectDetails() {
     renderUrlBlocks();
     renderFolderBlocks();
     renderFileBlocks();
+    renderSubprojectBlocks();
   });
 }
 
@@ -822,14 +824,12 @@ function renderUrlBlocks() {
     });
     // Drag reorder
     block.addEventListener('dragstart', (e) => {
-      console.log('[URL Drag] === DRAG START ===');
-      console.log('[URL Drag] Dragging URL:', u.name || extractDomain(u.url));
-      console.log('[URL Drag] From index:', index);
-      console.log('[URL Drag] Current URLs array:', urls.map((url, i) => `${i}: ${url.name || extractDomain(url.url)}`));
       block.classList.add('url-dragging');
       e.dataTransfer.effectAllowed = 'move';
       e.dataTransfer.setData('text/url-index', index.toString());
-      e.dataTransfer.setData('text/drag-type', 'url'); // 标记类型
+      e.dataTransfer.setData('text/drag-type', 'url');
+      e.dataTransfer.setData('text/cross-drag-data', JSON.stringify({ type: 'url', url: u.url, name: u.name || '' }));
+      e.dataTransfer.setData('text/cross-drag-index', index.toString());
     });
     block.addEventListener('dragend', () => {
       block.classList.remove('url-dragging');
@@ -846,57 +846,26 @@ function renderUrlBlocks() {
     });
     block.addEventListener('dragleave', () => block.classList.remove('url-drag-over'));
     block.addEventListener('drop', (e) => {
-      e.preventDefault();
-      e.stopPropagation();
       block.classList.remove('url-drag-over');
 
-      console.log('[URL Drag] === DROP EVENT ===');
-      console.log('[URL Drag] Dropped on block:', block.textContent);
-      console.log('[URL Drag] Block dataset.urlIndex:', block.dataset.urlIndex);
-
-      // 检查是否是 URL 类型
+      // 只处理 URL 内部排序，其他类型让事件冒泡到 container
       const dragType = e.dataTransfer.getData('text/drag-type');
-      console.log('[URL Drag] Drag type:', dragType);
-      if (dragType !== 'url') {
-        console.log('[URL Drag] Not a URL drag, ignoring');
-        return;
-      }
+      if (dragType !== 'url') return;
+      e.preventDefault();
+      e.stopPropagation();
 
       const fromIdx = parseInt(e.dataTransfer.getData('text/url-index'));
-      console.log('[URL Drag] From index (from dataTransfer):', fromIdx);
-      if (isNaN(fromIdx)) {
-        console.log('[URL Drag] Invalid fromIdx, aborting');
-        return;
-      }
+      if (isNaN(fromIdx)) return;
 
-      // 使用 dataset 中的原始索引（这是正确的）
       const toIdx = parseInt(block.dataset.urlIndex);
-      console.log('[URL Drag] To index (from dataset):', toIdx);
-      console.log('[URL Drag] Current URLs before reorder:', urls.map((url, i) => `${i}: ${url.name || extractDomain(url.url)}`));
+      if (isNaN(toIdx) || fromIdx === toIdx) return;
 
-      if (isNaN(toIdx) || fromIdx === toIdx) {
-        console.log('[URL Drag] Invalid toIdx or same position, aborting');
-        return;
-      }
-
-      // 正确的拖放排序逻辑
       const newUrls = [...urls];
-      console.log('[URL Drag] Step 1 - Copy array:', newUrls.map((url, i) => `${i}: ${url.name || extractDomain(url.url)}`));
-
       const [moved] = newUrls.splice(fromIdx, 1);
-      console.log('[URL Drag] Step 2 - After splice(fromIdx, 1):', newUrls.map((url, i) => `${i}: ${url.name || extractDomain(url.url)}`));
-      console.log('[URL Drag] Moved item:', moved.name || extractDomain(moved.url));
-
-      // 如果目标位置在源位置之后，删除源元素后索引会前移，需要调整
       const adjustedToIdx = toIdx > fromIdx ? toIdx - 1 : toIdx;
-      console.log('[URL Drag] Adjusted toIdx:', adjustedToIdx, '(original:', toIdx, ', fromIdx:', fromIdx, ')');
-
       newUrls.splice(adjustedToIdx, 0, moved);
-      console.log('[URL Drag] Step 3 - After splice(adjustedToIdx, 0, moved):', newUrls.map((url, i) => `${i}: ${url.name || extractDomain(url.url)}`));
-
       currentProject.urls = newUrls;
       window.electronAPI.updateProject(currentProject.id, { urls: newUrls });
-      console.log('[URL Drag] === REORDERING COMPLETE, CALLING renderUrlBlocks() ===');
       renderUrlBlocks();
     });
     container.appendChild(block);
@@ -926,6 +895,35 @@ function renderUrlBlocks() {
     }, 250);
   });
   container.appendChild(addBtn);
+
+  // Accept sp-item drops (move from subproject → URL list)
+  container.addEventListener('dragover', (e) => {
+    if (e.dataTransfer.types.includes('text/drag-type')) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+  });
+  container.addEventListener('drop', async (e) => {
+    const dragType = e.dataTransfer.getData('text/drag-type');
+    if (dragType !== 'sp-item') return;
+    e.preventDefault();
+    e.stopPropagation();
+    const itemDataStr = e.dataTransfer.getData('text/sp-item-data');
+    if (!itemDataStr) return;
+    const itemData = JSON.parse(itemDataStr);
+    if (itemData.type !== 'url') return;
+    // Add to urls
+    const newUrl = { url: itemData.url, name: itemData.name || '' };
+    currentProject.urls = [...(currentProject.urls || []), newUrl];
+    // Remove from source subproject
+    const fromSpIdx = parseInt(e.dataTransfer.getData('text/sp-index'));
+    const fromItemIdx = parseInt(e.dataTransfer.getData('text/sp-item-index'));
+    if (!isNaN(fromSpIdx) && !isNaN(fromItemIdx) && currentProject.subprojects?.[fromSpIdx]) {
+      currentProject.subprojects[fromSpIdx].items.splice(fromItemIdx, 1);
+    }
+    await window.electronAPI.updateProject(currentProject.id, { urls: currentProject.urls, subprojects: currentProject.subprojects });
+    showProjectDetails();
+  });
 
   urlSection.appendChild(label);
   urlSection.appendChild(container);
@@ -970,14 +968,12 @@ function renderFolderBlocks() {
     });
     // Drag reorder
     block.addEventListener('dragstart', (e) => {
-      console.log('[Folder Drag] === DRAG START ===');
-      console.log('[Folder Drag] Dragging folder:', f.name || f.path.split('/').pop());
-      console.log('[Folder Drag] From index:', index);
-      console.log('[Folder Drag] Current folders array:', folders.map((folder, i) => `${i}: ${folder.name || folder.path.split('/').pop()}`));
       block.classList.add('folder-dragging');
       e.dataTransfer.effectAllowed = 'move';
       e.dataTransfer.setData('text/folder-index', index.toString());
-      e.dataTransfer.setData('text/drag-type', 'folder'); // 标记类型
+      e.dataTransfer.setData('text/drag-type', 'folder');
+      e.dataTransfer.setData('text/cross-drag-data', JSON.stringify({ type: 'folder', path: f.path, name: f.name || '' }));
+      e.dataTransfer.setData('text/cross-drag-index', index.toString());
     });
     block.addEventListener('dragend', () => {
       block.classList.remove('folder-dragging');
@@ -994,21 +990,17 @@ function renderFolderBlocks() {
     });
     block.addEventListener('dragleave', () => block.classList.remove('folder-drag-over'));
     block.addEventListener('drop', (e) => {
+      block.classList.remove('folder-drag-over');
+
+      // 只处理 folder 内部排序，其他类型让事件冒泡到 container
+      const dragType = e.dataTransfer.getData('text/drag-type');
+      if (dragType !== 'folder') return;
       e.preventDefault();
       e.stopPropagation();
-      block.classList.remove('folder-drag-over');
 
       console.log('[Folder Drag] === DROP EVENT ===');
       console.log('[Folder Drag] Dropped on block:', block.textContent);
       console.log('[Folder Drag] Block dataset.folderIndex:', block.dataset.folderIndex);
-
-      // 检查是否是文件夹类型
-      const dragType = e.dataTransfer.getData('text/drag-type');
-      console.log('[Folder Drag] Drag type:', dragType);
-      if (dragType !== 'folder') {
-        console.log('[Folder Drag] Not a folder drag, ignoring');
-        return;
-      }
 
       const fromIdx = parseInt(e.dataTransfer.getData('text/folder-index'));
       console.log('[Folder Drag] From index (from dataTransfer):', fromIdx);
@@ -1128,6 +1120,32 @@ function renderFolderBlocks() {
 
   container.appendChild(addBtn);
 
+  // Accept sp-item drops (move from subproject → Folder list)
+  container.addEventListener('dragover', (e) => {
+    if (e.dataTransfer.types.includes('text/drag-type')) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+  });
+  container.addEventListener('drop', async (e) => {
+    const dragType = e.dataTransfer.getData('text/drag-type');
+    if (dragType !== 'sp-item') return;
+    e.preventDefault();
+    e.stopPropagation();
+    const itemDataStr = e.dataTransfer.getData('text/sp-item-data');
+    if (!itemDataStr) return;
+    const itemData = JSON.parse(itemDataStr);
+    if (itemData.type !== 'folder') return;
+    currentProject.folders = [...(currentProject.folders || []), { path: itemData.path, name: itemData.name || '' }];
+    const fromSpIdx = parseInt(e.dataTransfer.getData('text/sp-index'));
+    const fromItemIdx = parseInt(e.dataTransfer.getData('text/sp-item-index'));
+    if (!isNaN(fromSpIdx) && !isNaN(fromItemIdx) && currentProject.subprojects?.[fromSpIdx]) {
+      currentProject.subprojects[fromSpIdx].items.splice(fromItemIdx, 1);
+    }
+    await window.electronAPI.updateProject(currentProject.id, { folders: currentProject.folders, subprojects: currentProject.subprojects });
+    showProjectDetails();
+  });
+
   folderSection.appendChild(label);
   folderSection.appendChild(container);
 
@@ -1168,14 +1186,12 @@ function renderFileBlocks() {
     });
     // Drag reorder
     block.addEventListener('dragstart', (e) => {
-      console.log('[File Drag] === DRAG START ===');
-      console.log('[File Drag] Dragging file:', f.name || f.path.split('/').pop());
-      console.log('[File Drag] From index:', index);
-      console.log('[File Drag] Current files array:', files.map((file, i) => `${i}: ${file.name || file.path.split('/').pop()}`));
       block.classList.add('file-dragging');
       e.dataTransfer.effectAllowed = 'move';
       e.dataTransfer.setData('text/file-index', index.toString());
-      e.dataTransfer.setData('text/drag-type', 'file'); // 标记类型
+      e.dataTransfer.setData('text/drag-type', 'file');
+      e.dataTransfer.setData('text/cross-drag-data', JSON.stringify({ type: 'file', path: f.path, name: f.name || '' }));
+      e.dataTransfer.setData('text/cross-drag-index', index.toString());
     });
     block.addEventListener('dragend', () => {
       block.classList.remove('file-dragging');
@@ -1192,21 +1208,17 @@ function renderFileBlocks() {
     });
     block.addEventListener('dragleave', () => block.classList.remove('file-drag-over'));
     block.addEventListener('drop', (e) => {
+      block.classList.remove('file-drag-over');
+
+      // 只处理 file 内部排序，其他类型让事件冒泡到 container
+      const dragType = e.dataTransfer.getData('text/drag-type');
+      if (dragType !== 'file') return;
       e.preventDefault();
       e.stopPropagation();
-      block.classList.remove('file-drag-over');
 
       console.log('[File Drag] === DROP EVENT ===');
       console.log('[File Drag] Dropped on block:', block.textContent);
       console.log('[File Drag] Block dataset.fileIndex:', block.dataset.fileIndex);
-
-      // 检查是否是文件类型
-      const dragType = e.dataTransfer.getData('text/drag-type');
-      console.log('[File Drag] Drag type:', dragType);
-      if (dragType !== 'file') {
-        console.log('[File Drag] Not a file drag, ignoring');
-        return;
-      }
 
       const fromIdx = parseInt(e.dataTransfer.getData('text/file-index'));
       console.log('[File Drag] From index (from dataTransfer):', fromIdx);
@@ -1331,6 +1343,36 @@ function renderFileBlocks() {
 
   container.appendChild(addBtn);
 
+  // Accept sp-item drops (move from subproject → File list)
+  // Note: the container already has dragover/drop for external Files;
+  // we add sp-item handling inside the existing drop handler cannot be easily merged,
+  // so we add a capturing listener on the container
+  const origDragover = container.ondragover;
+  container.addEventListener('dragover', (e) => {
+    if (e.dataTransfer.types.includes('text/drag-type')) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+  });
+  container.addEventListener('drop', async (e) => {
+    const dragType = e.dataTransfer.getData('text/drag-type');
+    if (dragType !== 'sp-item') return;
+    e.preventDefault();
+    e.stopPropagation();
+    const itemDataStr = e.dataTransfer.getData('text/sp-item-data');
+    if (!itemDataStr) return;
+    const itemData = JSON.parse(itemDataStr);
+    if (itemData.type !== 'file') return;
+    currentProject.files = [...(currentProject.files || []), { path: itemData.path, name: itemData.name || '' }];
+    const fromSpIdx = parseInt(e.dataTransfer.getData('text/sp-index'));
+    const fromItemIdx = parseInt(e.dataTransfer.getData('text/sp-item-index'));
+    if (!isNaN(fromSpIdx) && !isNaN(fromItemIdx) && currentProject.subprojects?.[fromSpIdx]) {
+      currentProject.subprojects[fromSpIdx].items.splice(fromItemIdx, 1);
+    }
+    await window.electronAPI.updateProject(currentProject.id, { files: currentProject.files, subprojects: currentProject.subprojects });
+    showProjectDetails();
+  });
+
   fileSection.appendChild(label);
   fileSection.appendChild(container);
   detailsContent.appendChild(fileSection);
@@ -1339,6 +1381,349 @@ function renderFileBlocks() {
 // === Quick Action Buttons (Header) - No longer used ===
 function renderQuickActionButtons() {
   // Quick add buttons are now inline with URL/Folder blocks
+}
+
+// === Subproject Blocks (Details Page) ===
+function renderSubprojectBlocks() {
+  const subprojects = currentProject?.subprojects || [];
+  let spSection = document.getElementById('subprojectBlocksSection');
+  if (spSection) spSection.remove();
+  if (subprojects.length === 0) return;
+
+  const detailsContent = document.querySelector('.details-content');
+  spSection = document.createElement('div');
+  spSection.id = 'subprojectBlocksSection';
+  spSection.className = 'info-item';
+  const sectionLabel = document.createElement('label');
+  sectionLabel.textContent = t('subproject.title') || 'Subprojects';
+  spSection.appendChild(sectionLabel);
+
+  subprojects.forEach((sp, spIndex) => {
+    const section = document.createElement('div');
+    section.className = 'subproject-section';
+    section.dataset.spIndex = spIndex;
+
+    // Header: name + delete button
+    const header = document.createElement('div');
+    header.className = 'subproject-header';
+    const nameEl = document.createElement('span');
+    nameEl.className = 'subproject-name';
+    nameEl.textContent = sp.name || t('subproject.name');
+    nameEl.addEventListener('click', () => {
+      const input = document.createElement('input');
+      input.type = 'text';
+      input.className = 'subproject-name-input';
+      input.value = sp.name || '';
+      input.placeholder = t('subproject.name');
+      nameEl.replaceWith(input);
+      input.focus();
+      input.select();
+      const save = async () => {
+        const newName = input.value.trim() || sp.name;
+        sp.name = newName;
+        currentProject.subprojects[spIndex].name = newName;
+        await window.electronAPI.updateProject(currentProject.id, { subprojects: currentProject.subprojects });
+        renderSubprojectBlocks();
+      };
+      input.addEventListener('blur', save);
+      input.addEventListener('keydown', (e) => { if (e.key === 'Enter') save(); });
+    });
+    header.appendChild(nameEl);
+
+    const actions = document.createElement('div');
+    actions.className = 'subproject-actions';
+    const delBtn = document.createElement('button');
+    delBtn.className = 'btn-remove-command';
+    delBtn.innerHTML = icons.x;
+    delBtn.title = t('confirm.delete');
+    delBtn.addEventListener('click', async () => {
+      currentProject.subprojects.splice(spIndex, 1);
+      await window.electronAPI.updateProject(currentProject.id, { subprojects: currentProject.subprojects });
+      renderSubprojectBlocks();
+    });
+    actions.appendChild(delBtn);
+    header.appendChild(actions);
+    section.appendChild(header);
+
+    // Items container
+    const itemsContainer = document.createElement('div');
+    itemsContainer.className = 'subproject-items';
+
+    (sp.items || []).forEach((item, itemIndex) => {
+      const block = document.createElement('div');
+      block.className = `subproject-item-block type-${item.type}`;
+      block.title = item.type === 'url' ? item.url : item.path;
+      block.draggable = true;
+      block.dataset.itemIndex = itemIndex;
+      block.textContent = item.name || (item.type === 'url' ? extractDomain(item.url) : (item.path || '').split('/').pop());
+
+      block.addEventListener('click', () => {
+        if (block.classList.contains('sp-dragging')) return;
+        if (item.type === 'url') window.electronAPI.openUrl(item.url);
+        else if (item.type === 'folder') window.electronAPI.openFolder(item.path);
+        else if (item.type === 'file') window.electronAPI.openFileWithDefault(item.path);
+      });
+
+      // Drag: carry full item data for cross-section drag
+      block.addEventListener('dragstart', (e) => {
+        block.classList.add('sp-dragging');
+        e.dataTransfer.effectAllowed = 'move';
+        e.dataTransfer.setData('text/sp-item-index', itemIndex.toString());
+        e.dataTransfer.setData('text/sp-index', spIndex.toString());
+        e.dataTransfer.setData('text/drag-type', 'sp-item');
+        e.dataTransfer.setData('text/sp-item-data', JSON.stringify(item));
+      });
+      block.addEventListener('dragend', () => {
+        block.classList.remove('sp-dragging');
+        itemsContainer.querySelectorAll('.subproject-item-block').forEach(b => b.classList.remove('sp-drag-over'));
+      });
+      block.addEventListener('dragover', (e) => {
+        const dragging = itemsContainer.querySelector('.sp-dragging');
+        if (!dragging) return;
+        e.preventDefault();
+        e.stopPropagation();
+        e.dataTransfer.dropEffect = 'move';
+        if (dragging !== block) block.classList.add('sp-drag-over');
+      });
+      block.addEventListener('dragleave', () => block.classList.remove('sp-drag-over'));
+      block.addEventListener('drop', async (e) => {
+        block.classList.remove('sp-drag-over');
+        const dragType = e.dataTransfer.getData('text/drag-type');
+        // Only handle internal reorder (sp-item within same subproject)
+        // Let other drag types bubble up to section handler
+        if (dragType !== 'sp-item') return;
+        const fromSpIdx = parseInt(e.dataTransfer.getData('text/sp-index'));
+        if (fromSpIdx !== spIndex) return;
+        e.preventDefault();
+        e.stopPropagation();
+        const fromIdx = parseInt(e.dataTransfer.getData('text/sp-item-index'));
+        const toIdx = parseInt(block.dataset.itemIndex);
+        if (isNaN(fromIdx) || isNaN(toIdx) || fromIdx === toIdx) return;
+        const items = [...sp.items];
+        const [moved] = items.splice(fromIdx, 1);
+        const adjustedToIdx = toIdx > fromIdx ? toIdx - 1 : toIdx;
+        items.splice(adjustedToIdx, 0, moved);
+        currentProject.subprojects[spIndex].items = items;
+        await window.electronAPI.updateProject(currentProject.id, { subprojects: currentProject.subprojects });
+        renderSubprojectBlocks();
+      });
+      itemsContainer.appendChild(block);
+    });
+
+    // Add item drop zone / button — accepts external files AND cross-section drags
+    const addZone = document.createElement('div');
+    addZone.className = 'subproject-drop-zone';
+    addZone.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" width="16" height="16"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>';
+    addZone.title = t('subproject.addItem');
+
+    addZone.addEventListener('click', () => {
+      openModal(true, currentProject);
+      setTimeout(() => {
+        const spList = document.getElementById('subprojectsList');
+        if (spList) spList.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }, 300);
+    });
+
+    // Drop zone accepts: external files, url-blocks, folder-blocks, file-blocks, sp-items from other subprojects
+    addZone.addEventListener('dragover', (e) => {
+      const hasFiles = e.dataTransfer.types.includes('Files');
+      const hasDragType = e.dataTransfer.types.includes('text/drag-type');
+      // Accept external files
+      if (hasFiles && !hasDragType) {
+        e.preventDefault();
+        e.stopPropagation();
+        addZone.style.transform = 'scale(1.1)';
+        addZone.style.borderColor = 'rgba(59, 130, 246, 0.8)';
+        return;
+      }
+      // Accept cross-section drags (url, folder, file, sp-item from another subproject)
+      if (hasDragType) {
+        e.preventDefault();
+        e.stopPropagation();
+        addZone.style.transform = 'scale(1.1)';
+        addZone.style.borderColor = 'rgba(59, 130, 246, 0.8)';
+      }
+    });
+    addZone.addEventListener('dragleave', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      addZone.style.transform = '';
+      addZone.style.borderColor = '';
+    });
+    addZone.addEventListener('drop', async (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      addZone.style.transform = '';
+      addZone.style.borderColor = '';
+
+      const dragType = e.dataTransfer.getData('text/drag-type');
+
+      // Handle cross-section drag from URL/Folder/File blocks into this subproject
+      if (dragType === 'url' || dragType === 'folder' || dragType === 'file') {
+        const itemData = e.dataTransfer.getData('text/cross-drag-data');
+        if (itemData) {
+          const parsed = JSON.parse(itemData);
+          if (!currentProject.subprojects[spIndex].items) currentProject.subprojects[spIndex].items = [];
+          currentProject.subprojects[spIndex].items.push(parsed);
+
+          // Remove from source list
+          const sourceIndex = parseInt(e.dataTransfer.getData('text/cross-drag-index'));
+          if (!isNaN(sourceIndex)) {
+            if (dragType === 'url') {
+              currentProject.urls.splice(sourceIndex, 1);
+              await window.electronAPI.updateProject(currentProject.id, { urls: currentProject.urls, subprojects: currentProject.subprojects });
+            } else if (dragType === 'folder') {
+              currentProject.folders.splice(sourceIndex, 1);
+              await window.electronAPI.updateProject(currentProject.id, { folders: currentProject.folders, subprojects: currentProject.subprojects });
+            } else if (dragType === 'file') {
+              currentProject.files.splice(sourceIndex, 1);
+              await window.electronAPI.updateProject(currentProject.id, { files: currentProject.files, subprojects: currentProject.subprojects });
+            }
+          }
+          showProjectDetails();
+          return;
+        }
+      }
+
+      // Handle sp-item from another subproject
+      if (dragType === 'sp-item') {
+        const fromSpIdx = parseInt(e.dataTransfer.getData('text/sp-index'));
+        const fromItemIdx = parseInt(e.dataTransfer.getData('text/sp-item-index'));
+        if (fromSpIdx === spIndex) return; // Same subproject, handled by block drop
+        if (isNaN(fromSpIdx) || isNaN(fromItemIdx)) return;
+        const movedItem = currentProject.subprojects[fromSpIdx].items.splice(fromItemIdx, 1)[0];
+        if (!currentProject.subprojects[spIndex].items) currentProject.subprojects[spIndex].items = [];
+        currentProject.subprojects[spIndex].items.push(movedItem);
+        await window.electronAPI.updateProject(currentProject.id, { subprojects: currentProject.subprojects });
+        renderSubprojectBlocks();
+        return;
+      }
+
+      // Handle external files from OS
+      const files = e.dataTransfer.files;
+      if (files.length > 0) {
+        const newItems = [];
+        for (let i = 0; i < files.length; i++) {
+          const filePath = files[i].path;
+          const pathInfo = await window.electronAPI.checkPathType(filePath);
+          if (pathInfo && pathInfo.exists) {
+            const itemName = filePath.split('/').pop() || '';
+            if (pathInfo.isDirectory) {
+              newItems.push({ type: 'folder', path: filePath, name: itemName });
+            } else {
+              newItems.push({ type: 'file', path: filePath, name: itemName });
+            }
+          }
+        }
+        if (newItems.length > 0) {
+          if (!currentProject.subprojects[spIndex].items) currentProject.subprojects[spIndex].items = [];
+          currentProject.subprojects[spIndex].items.push(...newItems);
+          await window.electronAPI.updateProject(currentProject.id, { subprojects: currentProject.subprojects });
+          renderSubprojectBlocks();
+          showToast(`Added ${newItems.length} item(s)`, 'success');
+        }
+      }
+    });
+    itemsContainer.appendChild(addZone);
+
+    section.appendChild(itemsContainer);
+
+    // === Make the entire subproject section a drop zone ===
+    // This allows dropping anywhere in the section, not just on the add button
+    section.addEventListener('dragover', (e) => {
+      const hasFiles = e.dataTransfer.types.includes('Files');
+      const hasDragType = e.dataTransfer.types.includes('text/drag-type');
+      if (hasFiles && !hasDragType) {
+        e.preventDefault();
+        section.classList.add('subproject-section-drag-over');
+        return;
+      }
+      if (hasDragType) {
+        e.preventDefault();
+        section.classList.add('subproject-section-drag-over');
+      }
+    });
+    section.addEventListener('dragleave', (e) => {
+      // Only remove highlight when leaving the section itself (not entering a child)
+      if (!section.contains(e.relatedTarget)) {
+        section.classList.remove('subproject-section-drag-over');
+      }
+    });
+    section.addEventListener('drop', async (e) => {
+      e.preventDefault();
+      section.classList.remove('subproject-section-drag-over');
+
+      const dragType = e.dataTransfer.getData('text/drag-type');
+
+      // Cross-section drag from URL/Folder/File blocks
+      if (dragType === 'url' || dragType === 'folder' || dragType === 'file') {
+        const itemData = e.dataTransfer.getData('text/cross-drag-data');
+        if (itemData) {
+          const parsed = JSON.parse(itemData);
+          if (!currentProject.subprojects[spIndex].items) currentProject.subprojects[spIndex].items = [];
+          currentProject.subprojects[spIndex].items.push(parsed);
+          const sourceIndex = parseInt(e.dataTransfer.getData('text/cross-drag-index'));
+          if (!isNaN(sourceIndex)) {
+            if (dragType === 'url') {
+              currentProject.urls.splice(sourceIndex, 1);
+              await window.electronAPI.updateProject(currentProject.id, { urls: currentProject.urls, subprojects: currentProject.subprojects });
+            } else if (dragType === 'folder') {
+              currentProject.folders.splice(sourceIndex, 1);
+              await window.electronAPI.updateProject(currentProject.id, { folders: currentProject.folders, subprojects: currentProject.subprojects });
+            } else if (dragType === 'file') {
+              currentProject.files.splice(sourceIndex, 1);
+              await window.electronAPI.updateProject(currentProject.id, { files: currentProject.files, subprojects: currentProject.subprojects });
+            }
+          }
+          showProjectDetails();
+          return;
+        }
+      }
+
+      // sp-item from another subproject
+      if (dragType === 'sp-item') {
+        const fromSpIdx = parseInt(e.dataTransfer.getData('text/sp-index'));
+        const fromItemIdx = parseInt(e.dataTransfer.getData('text/sp-item-index'));
+        if (fromSpIdx === spIndex) return;
+        if (isNaN(fromSpIdx) || isNaN(fromItemIdx)) return;
+        const movedItem = currentProject.subprojects[fromSpIdx].items.splice(fromItemIdx, 1)[0];
+        if (!currentProject.subprojects[spIndex].items) currentProject.subprojects[spIndex].items = [];
+        currentProject.subprojects[spIndex].items.push(movedItem);
+        await window.electronAPI.updateProject(currentProject.id, { subprojects: currentProject.subprojects });
+        renderSubprojectBlocks();
+        return;
+      }
+
+      // External files from OS
+      const files = e.dataTransfer.files;
+      if (files.length > 0) {
+        const newItems = [];
+        for (let i = 0; i < files.length; i++) {
+          const filePath = files[i].path;
+          const pathInfo = await window.electronAPI.checkPathType(filePath);
+          if (pathInfo && pathInfo.exists) {
+            const itemName = filePath.split('/').pop() || '';
+            if (pathInfo.isDirectory) {
+              newItems.push({ type: 'folder', path: filePath, name: itemName });
+            } else {
+              newItems.push({ type: 'file', path: filePath, name: itemName });
+            }
+          }
+        }
+        if (newItems.length > 0) {
+          if (!currentProject.subprojects[spIndex].items) currentProject.subprojects[spIndex].items = [];
+          currentProject.subprojects[spIndex].items.push(...newItems);
+          await window.electronAPI.updateProject(currentProject.id, { subprojects: currentProject.subprojects });
+          renderSubprojectBlocks();
+          showToast(`Added ${newItems.length} item(s)`, 'success');
+        }
+      }
+    });
+
+    spSection.appendChild(section);
+  });
+
+  detailsContent.appendChild(spSection);
 }
 
 function extractDomain(url) {
@@ -1362,6 +1747,7 @@ function openModal(editMode = false, project = null) {
     renderUrlInputs(project.urls || []);
     renderFolderInputs(project.folders || []);
     renderFileInputs(project.files || []);
+    renderSubprojectInputs(project.subprojects || []);
   } else {
     document.getElementById('modalProjectName').value = '';
     document.getElementById('modalProjectPath').value = '';
@@ -1369,6 +1755,7 @@ function openModal(editMode = false, project = null) {
     renderCommandInputs(['claude --dangerously-skip-permissions '], [''], ['terminal']);
     renderUrlInputs([]);
     renderFolderInputs([]);
+    renderSubprojectInputs([]);
   }
   projectModal.classList.add('show');
   // Focus first input after animation
@@ -1667,7 +2054,211 @@ function addFileInput() {
   addFileInputWithValue('', '');
 }
 
+// === Subproject Inputs (Modal) ===
+function renderSubprojectInputs(subprojects = []) {
+  const list = document.getElementById('subprojectsList');
+  list.innerHTML = '';
+  subprojects.forEach(sp => addSubprojectInputWithValue(sp));
+}
+
+function addSubprojectInputWithValue(sp = { name: '', items: [] }) {
+  const list = document.getElementById('subprojectsList');
+  const container = document.createElement('div');
+  container.className = 'subproject-modal-item';
+  // 保留已有 ID 以便在 collect 时复用
+  if (sp.id) container.dataset.spId = sp.id;
+
+  // Header: name + remove subproject
+  const header = document.createElement('div');
+  header.className = 'subproject-modal-header';
+  const nameInput = document.createElement('input');
+  nameInput.type = 'text';
+  nameInput.className = 'form-input';
+  nameInput.placeholder = t('subproject.name') || 'Subproject name';
+  nameInput.value = sp.name || '';
+  nameInput.addEventListener('blur', () => {
+    if (isEditMode && currentProject) autoSaveProject();
+  });
+
+  const removeSpBtn = document.createElement('button');
+  removeSpBtn.type = 'button';
+  removeSpBtn.className = 'btn-remove-command';
+  removeSpBtn.innerHTML = icons.x;
+  removeSpBtn.addEventListener('click', () => {
+    container.remove();
+    if (isEditMode && currentProject) autoSaveProject();
+  });
+  header.appendChild(nameInput);
+  header.appendChild(removeSpBtn);
+  container.appendChild(header);
+
+  // Items list
+  const itemsList = document.createElement('div');
+  itemsList.className = 'subproject-modal-items';
+  container.appendChild(itemsList);
+
+  (sp.items || []).forEach(item => addSubprojectItemRow(itemsList, item));
+
+  // Add item button with drag support
+  const addItemBtn = document.createElement('button');
+  addItemBtn.type = 'button';
+  addItemBtn.className = 'subproject-modal-add-item';
+  addItemBtn.textContent = t('subproject.addItem') || '+ Add Item';
+  addItemBtn.addEventListener('click', () => {
+    addSubprojectItemRow(itemsList, { type: 'url', url: '', name: '' });
+  });
+
+  // Drop files onto add-item button
+  addItemBtn.addEventListener('dragover', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    addItemBtn.style.borderColor = 'var(--accent)';
+    addItemBtn.style.background = 'rgba(59, 130, 246, 0.1)';
+  });
+  addItemBtn.addEventListener('dragleave', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    addItemBtn.style.borderColor = '';
+    addItemBtn.style.background = '';
+  });
+  addItemBtn.addEventListener('drop', async (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    addItemBtn.style.borderColor = '';
+    addItemBtn.style.background = '';
+    const files = e.dataTransfer.files;
+    if (files.length > 0) {
+      for (let i = 0; i < files.length; i++) {
+        const filePath = files[i].path;
+        const pathInfo = await window.electronAPI.checkPathType(filePath);
+        if (pathInfo && pathInfo.exists) {
+          const itemName = filePath.split('/').pop() || '';
+          if (pathInfo.isDirectory) {
+            addSubprojectItemRow(itemsList, { type: 'folder', path: filePath, name: itemName });
+          } else {
+            addSubprojectItemRow(itemsList, { type: 'file', path: filePath, name: itemName });
+          }
+        }
+      }
+      if (isEditMode && currentProject) autoSaveProject();
+    }
+  });
+
+  container.appendChild(addItemBtn);
+  list.appendChild(container);
+}
+
+function addSubprojectItemRow(itemsList, item = { type: 'url', url: '', name: '' }) {
+  const row = document.createElement('div');
+  row.className = 'subproject-modal-item-row';
+
+  const typeSelect = document.createElement('select');
+  typeSelect.innerHTML = `
+    <option value="url"${item.type === 'url' ? ' selected' : ''}>${t('subproject.typeUrl')}</option>
+    <option value="folder"${item.type === 'folder' ? ' selected' : ''}>${t('subproject.typeFolder')}</option>
+    <option value="file"${item.type === 'file' ? ' selected' : ''}>${t('subproject.typeFile')}</option>
+  `;
+  typeSelect.addEventListener('change', () => {
+    pathInput.readOnly = typeSelect.value !== 'url';
+    pathInput.placeholder = typeSelect.value === 'url' ? 'https://...' : '/path/to/' + typeSelect.value;
+    if (isEditMode && currentProject) autoSaveProject();
+  });
+
+  const pathInput = document.createElement('input');
+  pathInput.type = 'text';
+  pathInput.className = 'form-input';
+  pathInput.value = item.type === 'url' ? (item.url || '') : (item.path || '');
+  pathInput.placeholder = item.type === 'url' ? 'https://...' : '/path/to/' + item.type;
+  pathInput.readOnly = item.type !== 'url';
+  pathInput.addEventListener('blur', () => {
+    if (isEditMode && currentProject) autoSaveProject();
+  });
+
+  const nameInput = document.createElement('input');
+  nameInput.type = 'text';
+  nameInput.className = 'form-input item-name-field';
+  nameInput.placeholder = t('url.name') || 'Name';
+  nameInput.value = item.name || '';
+  nameInput.addEventListener('blur', () => {
+    if (isEditMode && currentProject) autoSaveProject();
+  });
+
+  // Browse button for folder/file types
+  const browseBtn = document.createElement('button');
+  browseBtn.type = 'button';
+  browseBtn.className = 'btn-browse-cmd';
+  browseBtn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="14" height="14"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>';
+  browseBtn.addEventListener('click', async () => {
+    const tp = typeSelect.value;
+    if (tp === 'url') return;
+    let result;
+    if (tp === 'folder') {
+      result = await window.electronAPI.selectFolder();
+    } else {
+      result = await window.electronAPI.selectFile(pathInput.value || undefined);
+    }
+    if (result && !result.canceled) {
+      pathInput.value = result.path;
+      if (!nameInput.value) nameInput.value = result.path.split('/').pop() || '';
+      if (isEditMode && currentProject) autoSaveProject();
+    }
+  });
+
+  const removeBtn = document.createElement('button');
+  removeBtn.type = 'button';
+  removeBtn.className = 'btn-remove-command';
+  removeBtn.innerHTML = icons.x;
+  removeBtn.addEventListener('click', () => {
+    row.remove();
+    if (isEditMode && currentProject) autoSaveProject();
+  });
+
+  row.appendChild(typeSelect);
+  row.appendChild(pathInput);
+  row.appendChild(nameInput);
+  row.appendChild(browseBtn);
+  row.appendChild(removeBtn);
+  itemsList.appendChild(row);
+}
+
+function addSubprojectInput() {
+  addSubprojectInputWithValue({ name: '', items: [] });
+}
+
 function closeModal() { projectModal.classList.remove('show'); }
+
+// === Collect Subprojects from Modal ===
+function collectSubprojectsFromModal() {
+  const spContainers = document.querySelectorAll('#subprojectsList .subproject-modal-item');
+  const subprojects = [];
+  spContainers.forEach(container => {
+    const nameInput = container.querySelector('.subproject-modal-header input');
+    const spName = nameInput ? nameInput.value.trim() : '';
+    // 只要有名称就保留子项目
+    if (!spName) return;
+    const itemRows = container.querySelectorAll('.subproject-modal-item-row');
+    const items = [];
+    itemRows.forEach(row => {
+      const typeSelect = row.querySelector('select');
+      const inputs = row.querySelectorAll('input');
+      const tp = typeSelect ? typeSelect.value : 'url';
+      const pathOrUrl = inputs[0] ? inputs[0].value.trim() : '';
+      const itemName = inputs[1] ? inputs[1].value.trim() : '';
+      if (pathOrUrl) {
+        if (tp === 'url') {
+          items.push({ type: 'url', url: pathOrUrl, name: itemName });
+        } else {
+          items.push({ type: tp, path: pathOrUrl, name: itemName });
+        }
+      }
+    });
+    // 保留已有 ID 或生成新 ID
+    const existingId = container.dataset.spId;
+    const id = existingId || (crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36) + Math.random().toString(36).slice(2));
+    subprojects.push({ id, name: spName, items });
+  });
+  return subprojects;
+}
 
 // === Auto Save ===
 let autoSaveTimeout = null;
@@ -1730,9 +2321,12 @@ async function autoSaveProject() {
         if (filePath) files.push({ path: filePath, name: fileName });
       });
 
+      // 收集 Subprojects
+      const subprojects = collectSubprojectsFromModal();
+
       const result = await window.electronAPI.updateProject(currentProject.id, {
         name, path: projPath, commands, command_names: commandNames, command_modes: commandModes,
-        result_path: outputPath, urls, folders, files,
+        result_path: outputPath, urls, folders, files, subprojects,
       });
 
       if (result.success) {
@@ -1822,14 +2416,17 @@ async function saveProject() {
     if (filePath) files.push({ path: filePath, name: fileName });
   });
 
+  // Collect Subprojects
+  const subprojects = collectSubprojectsFromModal();
+
   let result;
   if (isEditMode && currentProject) {
     result = await window.electronAPI.updateProject(currentProject.id, {
-      name, path: projPath, commands, command_names: commandNames, command_modes: commandModes, result_path: outputPath, urls, folders, files,
+      name, path: projPath, commands, command_names: commandNames, command_modes: commandModes, result_path: outputPath, urls, folders, files, subprojects,
     });
   } else {
     result = await window.electronAPI.addProject({
-      name, path: projPath, commands, command_names: commandNames, command_modes: commandModes, result_path: outputPath, urls, folders, files,
+      name, path: projPath, commands, command_names: commandNames, command_modes: commandModes, result_path: outputPath, urls, folders, files, subprojects,
     });
   }
 

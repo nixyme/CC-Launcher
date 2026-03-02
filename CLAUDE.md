@@ -82,6 +82,29 @@ npm start
 - CSP 策略已启用
 - nodeIntegration 禁用，contextIsolation 启用
 
+## Git 规范
+
+- 所有 commit message 必须使用英文，遵循 Conventional Commits 格式（`feat:` / `fix:` / `chore:` 等）
+- README.md 及面向用户的文档使用英文撰写，确保全球开发者可读
+- 代码注释优先使用英文；CLAUDE.md 作为内部开发指引可使用中文
+
+## 跨平台要求
+
+- 所有功能必须适配 macOS、Windows、Linux 三大主流系统
+- 禁止编写仅适用于单一操作系统的代码，必须包含平台分支逻辑（`process.platform`）
+- Shell 命令执行：macOS/Linux 使用用户默认 shell + RC 文件加载，Windows 使用 cmd/PowerShell
+- 文件路径：使用 `path.join()` 拼接，禁止硬编码 `/` 或 `\`
+- 开机自启动：macOS 用 LaunchAgent plist，Windows 用 Electron 内置 API，Linux 用 XDG Autostart .desktop
+- 新功能开发前须确认三平台实现方案，写代码时逐平台测试
+
+## 国际化（i18n）要求
+
+- 所有界面文本必须同时支持 4 种语言：English (en)、简体中文 (zh)、日本語 (ja)、Français (fr)
+- 新增或修改任何用户可见文案时，必须同步更新 `src/renderer/i18n.js` 中所有 4 种语言的翻译
+- 禁止在代码中硬编码界面文本，所有文案通过 `t('key')` 函数获取
+- HTML 元素使用 `data-i18n` / `data-i18n-placeholder` / `data-i18n-title` 属性绑定翻译 key
+- 翻译 key 命名规范：`模块.功能`（如 `file.title`、`subproject.add`）
+
 ## 常见开发任务
 
 ### 修改界面

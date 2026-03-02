@@ -14,6 +14,38 @@ class ProjectStore {
     this._createBackup();
   }
 
+  // 规范化 URL：自动补全 https:// 前缀
+  _normalizeUrl(url) {
+    if (!url || typeof url !== 'string') return url;
+    const trimmed = url.trim();
+    if (!trimmed) return trimmed;
+    // 已有协议前缀则不处理
+    if (/^[a-zA-Z][a-zA-Z0-9+.-]*:\/\//.test(trimmed)) return trimmed;
+    return 'https://' + trimmed;
+  }
+
+  // 规范化项目中所有 URL 字段
+  _normalizeProjectUrls(project) {
+    if (project.urls && Array.isArray(project.urls)) {
+      project.urls = project.urls.map(u => ({
+        ...u,
+        url: this._normalizeUrl(u.url),
+      }));
+    }
+    if (project.subprojects && Array.isArray(project.subprojects)) {
+      project.subprojects = project.subprojects.map(sp => ({
+        ...sp,
+        items: (sp.items || []).map(item => {
+          if (item.type === 'url') {
+            return { ...item, url: this._normalizeUrl(item.url) };
+          }
+          return item;
+        }),
+      }));
+    }
+    return project;
+  }
+
   _ensureDataFile() {
     if (!fs.existsSync(this.dataDir)) {
       fs.mkdirSync(this.dataDir, { recursive: true });
@@ -114,7 +146,7 @@ class ProjectStore {
     return this._loadProjects().find((p) => p.id === id) || null;
   }
 
-  addProject({ name, path: projPath, commands, command_names, command_modes, result_path, urls, pinned, folders, files }) {
+  addProject({ name, path: projPath, commands, command_names, command_modes, result_path, urls, pinned, folders, files, subprojects }) {
     const projects = this._loadProjects();
     if (projects.some((p) => p.name === name)) {
       throw new Error(`Project name '${name}' already exists`);
@@ -134,9 +166,11 @@ class ProjectStore {
       pinned: pinned || false,
       folders: folders || [],
       files: files || [],
+      subprojects: subprojects || [],
       order: 0,
     };
     projects.unshift(project);
+    this._normalizeProjectUrls(project);
     this._saveProjects(projects);
     return project;
   }
@@ -178,11 +212,15 @@ class ProjectStore {
     if (updates.files !== undefined) {
       project.files = updates.files;
     }
+    if (updates.subprojects !== undefined) {
+      project.subprojects = updates.subprojects;
+    }
     if (updates.pinned !== undefined) {
       project.pinned = updates.pinned;
     }
 
     projects[idx] = project;
+    this._normalizeProjectUrls(project);
     this._saveProjects(projects);
     return project;
   }
@@ -262,6 +300,7 @@ class ProjectStore {
           pinned: p.pinned !== undefined ? p.pinned : existingProject.pinned,
           folders: p.folders || [],
           files: p.files || [],
+          subprojects: p.subprojects || existingProject.subprojects || [],
           order: p.order !== undefined ? p.order : existingProject.order,
         });
         updated++;
@@ -280,6 +319,7 @@ class ProjectStore {
           pinned: p.pinned || false,
           folders: p.folders || [],
           files: p.files || [],
+          subprojects: p.subprojects || [],
           order: p.order !== undefined ? p.order : (maxOrder + 1 + i),
         };
         existing.push(newProject);

@@ -84,6 +84,17 @@ function normalizeCommandPath(command, projectPath, mode = 'terminal') {
   return command;
 }
 
+// 获取用户的 shell 路径和对应的 RC 文件
+function getUserShellInfo() {
+  const shell = process.env.SHELL || '/bin/zsh';
+  const home = process.env.HOME || '';
+  let rcFile = '';
+  if (shell.endsWith('/zsh')) rcFile = `${home}/.zshrc`;
+  else if (shell.endsWith('/bash')) rcFile = `${home}/.bashrc`;
+  else if (shell.endsWith('/fish')) rcFile = `${home}/.config/fish/config.fish`;
+  return { shell, rcFile };
+}
+
 // 版本号比较：返回 1(a>b), -1(a<b), 0(a==b)
 function compareVersions(a, b) {
   const pa = a.split('.').map(Number);
@@ -205,28 +216,35 @@ function registerIpcHandlers(store, autoUpdater, getMainWindow, scheduler) {
       command = normalizeCommandPath(command, workDir, 'terminal');
 
       if (platform === 'darwin') {
+        const { shell: userShell, rcFile } = getUserShellInfo();
+        const sourceCmd = rcFile ? `[ -f \\"${rcFile}\\" ] && source \\"${rcFile}\\" 2>/dev/null; ` : '';
         if (terminal === 'kaku') {
           if (!fs.existsSync('/Applications/Kaku.app')) {
             resolve({ success: false, error: 'Kaku.app not found in /Applications' });
             return;
           }
-          proc = spawn('open', ['-n', '-a', 'Kaku', '--args', 'start', '--always-new-process', '--cwd', workDir, '--', 'zsh', '-l', '-c', "cd '" + workDir.replace(/'/g, "'\\''") + "' && " + command + "; exec zsh"], { detached: true });
+          const escapedWd = workDir.replace(/'/g, "'\\''");
+          const sourcePrefix = rcFile ? `[ -f '${rcFile}' ] && . '${rcFile}' 2>/dev/null; ` : '';
+          const kakuCmd = sourcePrefix + "cd '" + escapedWd + "' && " + command + "; exec " + userShell;
+          proc = spawn('open', ['-n', '-a', 'Kaku', '--args', 'start', '--always-new-process', '--cwd', workDir, '--', userShell, '-l', '-c', kakuCmd], { detached: true });
           proc.unref();
         } else {
           const safePath = workDir.replace(/'/g, "'\\'");
           const script = `tell application "Terminal"
   activate
-  do script "cd '${safePath}' && ${command}"
+  do script "${sourceCmd}cd '${safePath}' && ${command}"
 end tell`;
           proc = spawn('osascript', ['-e', script]);
         }
       } else if (platform === 'linux') {
+        const { shell: userShell } = getUserShellInfo();
+        const shellName = path.basename(userShell);
         const terminals = ['gnome-terminal', 'xterm', 'xfce4-terminal', 'konsole'];
         const termArgs = {
-          'gnome-terminal': ['--', 'bash', '-c', "cd '" + workDir + "' && " + command + '; exec bash'],
-          'xterm': ['-e', 'bash -c "cd \'' + workDir + '\' && ' + command + '; exec bash"'],
-          'xfce4-terminal': ['-e', 'bash -c "cd \'' + workDir + '\' && ' + command + '; exec bash"'],
-          'konsole': ['-e', 'bash', '-c', "cd '" + workDir + "' && " + command + '; exec bash'],
+          'gnome-terminal': ['--', shellName, '-c', "cd '" + workDir + "' && " + command + '; exec ' + shellName],
+          'xterm': ['-e', shellName + ' -c "cd \'' + workDir + '\' && ' + command + '; exec ' + shellName + '"'],
+          'xfce4-terminal': ['-e', shellName + ' -c "cd \'' + workDir + '\' && ' + command + '; exec ' + shellName + '"'],
+          'konsole': ['-e', shellName, '-c', "cd '" + workDir + "' && " + command + '; exec ' + shellName],
         };
         let launched = false;
         for (const term of terminals) {
@@ -303,8 +321,12 @@ end tell`;
       let stdout = '';
       let stderr = '';
 
-      // 使用登录 shell 以加载完整环境变量
-      const proc = spawn('zsh', ['-l', '-c', `cd '${workDir.replace(/'/g, "'\\''")}' && ${command}`], {
+      // 使用用户默认 shell 并加载 RC 文件以获取完整 PATH
+      const { shell: userShell, rcFile } = getUserShellInfo();
+      const escapedWorkDir = workDir.replace(/'/g, "'\\''");
+      const sourceCmd = rcFile ? `[ -f "${rcFile}" ] && . "${rcFile}" 2>/dev/null; ` : '';
+      const fullCmd = `${sourceCmd}cd '${escapedWorkDir}' && ${command}`;
+      const proc = spawn(userShell, ['-l', '-c', fullCmd], {
         detached: false,
         stdio: ['ignore', 'pipe', 'pipe'],
         env: { ...process.env, ELECTRON_RUN_AS_NODE: undefined },
@@ -629,40 +651,136 @@ end tell`;
     }
   });
 
-  // --- Settings: Auto Launch ---
+  // --- Settings: Auto Launch (cross-platform) ---
+  // Helper: get platform-specific auto-launch file path
+  function getAutoLaunchPath() {
+    if (process.platform === 'darwin') {
+      return path.join(process.env.HOME || '', 'Library', 'LaunchAgents', 'com.nixyme.start-everything.plist');
+    } else if (process.platform === 'linux') {
+      const configDir = process.env.XDG_CONFIG_HOME || path.join(process.env.HOME || '', '.config');
+      return path.join(configDir, 'autostart', 'start-everything.desktop');
+    }
+    return null; // Windows uses Electron's built-in API
+  }
+
   ipcMain.handle('get-auto-launch', () => {
-    const settings = app.getLoginItemSettings();
-    console.log('[Auto Launch] Get:', settings.openAtLogin);
-    return settings.openAtLogin;
+    const autoFile = getAutoLaunchPath();
+    const fileExists = autoFile ? fs.existsSync(autoFile) : false;
+    const electronSetting = app.getLoginItemSettings().openAtLogin;
+    console.log('[Auto Launch] Get: file=%s, electron=%s, platform=%s', fileExists, electronSetting, process.platform);
+    return fileExists || electronSetting;
   });
 
   ipcMain.handle('set-auto-launch', (_event, enabled) => {
-    console.log('[Auto Launch] Set:', enabled);
-    console.log('[Auto Launch] App path:', app.getPath('exe'));
-    console.log('[Auto Launch] Is packaged:', app.isPackaged);
-    console.log('[Auto Launch] Platform:', process.platform);
+    console.log('[Auto Launch] Set:', enabled, 'platform:', process.platform, 'packaged:', app.isPackaged);
 
     if (!app.isPackaged) {
       console.log('[Auto Launch] Warning: Auto-launch may not work in development mode');
     }
 
     try {
+      // 1. Electron 内置方式（Windows 主力，其他平台辅助）
       const loginSettings = { openAtLogin: enabled };
-
-      // path is Windows-only; openAsHidden is deprecated on macOS 13+
       if (process.platform === 'win32') {
         loginSettings.path = app.getPath('exe');
       }
-
       app.setLoginItemSettings(loginSettings);
 
-      // Verify the setting was applied
-      const settings = app.getLoginItemSettings();
-      console.log('[Auto Launch] Verified:', settings);
+      // 2. macOS: LaunchAgent plist（非签名应用的可靠方案）
+      if (process.platform === 'darwin') {
+        const launchAgentsDir = path.join(process.env.HOME || '', 'Library', 'LaunchAgents');
+        const plistPath = path.join(launchAgentsDir, 'com.nixyme.start-everything.plist');
 
-      return { success: true, value: settings.openAtLogin };
+        if (enabled) {
+          if (!fs.existsSync(launchAgentsDir)) {
+            fs.mkdirSync(launchAgentsDir, { recursive: true });
+          }
+
+          // 获取 .app 路径
+          let appPath;
+          if (app.isPackaged) {
+            appPath = path.resolve(app.getAppPath(), '../../');
+          } else {
+            appPath = app.getPath('exe');
+          }
+
+          const plistContent = `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.nixyme.start-everything</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/usr/bin/open</string>
+    <string>-a</string>
+    <string>${appPath}</string>
+  </array>
+  <key>RunAtLoad</key>
+  <true/>
+</dict>
+</plist>`;
+          fs.writeFileSync(plistPath, plistContent, 'utf-8');
+          console.log('[Auto Launch] macOS: plist created at', plistPath);
+        } else {
+          if (fs.existsSync(plistPath)) {
+            fs.unlinkSync(plistPath);
+            console.log('[Auto Launch] macOS: plist removed');
+          }
+        }
+      }
+
+      // 3. Linux: XDG Autostart .desktop 文件
+      if (process.platform === 'linux') {
+        const configDir = process.env.XDG_CONFIG_HOME || path.join(process.env.HOME || '', '.config');
+        const autostartDir = path.join(configDir, 'autostart');
+        const desktopPath = path.join(autostartDir, 'start-everything.desktop');
+
+        if (enabled) {
+          if (!fs.existsSync(autostartDir)) {
+            fs.mkdirSync(autostartDir, { recursive: true });
+          }
+
+          const exePath = app.isPackaged ? app.getPath('exe') : process.execPath;
+          const desktopContent = `[Desktop Entry]
+Type=Application
+Name=Start Everything
+Exec=${exePath}
+X-GNOME-Autostart-enabled=true
+Hidden=false
+NoDisplay=false
+Comment=Manage and launch CLI projects
+`;
+          fs.writeFileSync(desktopPath, desktopContent, 'utf-8');
+          console.log('[Auto Launch] Linux: .desktop created at', desktopPath);
+        } else {
+          if (fs.existsSync(desktopPath)) {
+            fs.unlinkSync(desktopPath);
+            console.log('[Auto Launch] Linux: .desktop removed');
+          }
+        }
+      }
+
+      // 验证：必须同时检查文件和 Electron 登录项
+      const autoFile = getAutoLaunchPath();
+      const electronOk = app.getLoginItemSettings().openAtLogin === enabled;
+      const fileOk = autoFile
+        ? (enabled ? fs.existsSync(autoFile) : !fs.existsSync(autoFile))
+        : true;
+
+      // macOS/Linux: if file is correct but Electron login item lingers, retry
+      if (fileOk && !electronOk) {
+        console.log('[Auto Launch] Electron login item out of sync, retrying...');
+        app.setLoginItemSettings({ openAtLogin: enabled });
+      }
+
+      const finalElectronOk = app.getLoginItemSettings().openAtLogin === enabled;
+      const verified = fileOk && finalElectronOk;
+      console.log('[Auto Launch] Verified: file=%s, electron=%s, final=%s', fileOk, finalElectronOk, verified);
+
+      return { success: verified, value: enabled };
     } catch (e) {
-      console.error('[Auto Launch] Error setting login item:', e);
+      console.error('[Auto Launch] Error:', e);
       return { success: false, error: e.message };
     }
   });
