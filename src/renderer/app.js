@@ -1393,19 +1393,22 @@ function renderSubprojectBlocks() {
   const detailsContent = document.querySelector('.details-content');
   spSection = document.createElement('div');
   spSection.id = 'subprojectBlocksSection';
-  spSection.className = 'info-item';
-  const sectionLabel = document.createElement('label');
-  sectionLabel.textContent = t('subproject.title') || 'Subprojects';
-  spSection.appendChild(sectionLabel);
 
   subprojects.forEach((sp, spIndex) => {
     const section = document.createElement('div');
     section.className = 'subproject-section';
     section.dataset.spIndex = spIndex;
 
-    // Header: name + delete button
+    // Header: drag handle + name (delete only in edit modal)
     const header = document.createElement('div');
     header.className = 'subproject-header';
+    header.draggable = true;
+
+    const dragHandle = document.createElement('div');
+    dragHandle.className = 'sp-section-drag-handle';
+    dragHandle.innerHTML = '<svg viewBox="0 0 24 24" fill="currentColor" width="14" height="14"><circle cx="9" cy="6" r="1.5"/><circle cx="15" cy="6" r="1.5"/><circle cx="9" cy="12" r="1.5"/><circle cx="15" cy="12" r="1.5"/><circle cx="9" cy="18" r="1.5"/><circle cx="15" cy="18" r="1.5"/></svg>';
+    header.appendChild(dragHandle);
+
     const nameEl = document.createElement('span');
     nameEl.className = 'subproject-name';
     nameEl.textContent = sp.name || t('subproject.name');
@@ -1415,10 +1418,12 @@ function renderSubprojectBlocks() {
       input.className = 'subproject-name-input';
       input.value = sp.name || '';
       input.placeholder = t('subproject.name');
+      header.draggable = false; // Disable drag during name edit
       nameEl.replaceWith(input);
       input.focus();
       input.select();
       const save = async () => {
+        header.draggable = true; // Re-enable drag after edit
         const newName = input.value.trim() || sp.name;
         sp.name = newName;
         currentProject.subprojects[spIndex].name = newName;
@@ -1429,21 +1434,22 @@ function renderSubprojectBlocks() {
       input.addEventListener('keydown', (e) => { if (e.key === 'Enter') save(); });
     });
     header.appendChild(nameEl);
-
-    const actions = document.createElement('div');
-    actions.className = 'subproject-actions';
-    const delBtn = document.createElement('button');
-    delBtn.className = 'btn-remove-command';
-    delBtn.innerHTML = icons.x;
-    delBtn.title = t('confirm.delete');
-    delBtn.addEventListener('click', async () => {
-      currentProject.subprojects.splice(spIndex, 1);
-      await window.electronAPI.updateProject(currentProject.id, { subprojects: currentProject.subprojects });
-      renderSubprojectBlocks();
-    });
-    actions.appendChild(delBtn);
-    header.appendChild(actions);
     section.appendChild(header);
+
+    // Subproject section drag reorder
+    header.addEventListener('dragstart', (e) => {
+      if (e.target.tagName === 'INPUT') { e.preventDefault(); return; }
+      section.classList.add('subproject-section-dragging');
+      e.dataTransfer.effectAllowed = 'move';
+      e.dataTransfer.setData('text/drag-type', 'subproject-section');
+      e.dataTransfer.setData('text/sp-section-index', spIndex.toString());
+    });
+    header.addEventListener('dragend', () => {
+      section.classList.remove('subproject-section-dragging');
+      spSection.querySelectorAll('.subproject-section').forEach(s => {
+        s.classList.remove('sp-section-drag-over');
+      });
+    });
 
     // Items container
     const itemsContainer = document.createElement('div');
@@ -1629,10 +1635,21 @@ function renderSubprojectBlocks() {
     section.appendChild(itemsContainer);
 
     // === Make the entire subproject section a drop zone ===
-    // This allows dropping anywhere in the section, not just on the add button
     section.addEventListener('dragover', (e) => {
       const hasFiles = e.dataTransfer.types.includes('Files');
       const hasDragType = e.dataTransfer.types.includes('text/drag-type');
+      const isSectionReorder = e.dataTransfer.types.includes('text/sp-section-index');
+
+      // Subproject section reorder — show border indicator
+      if (isSectionReorder) {
+        e.preventDefault();
+        if (!section.classList.contains('subproject-section-dragging')) {
+          section.classList.add('sp-section-drag-over');
+        }
+        return;
+      }
+
+      // Item drops — show fill highlight
       if (hasFiles && !hasDragType) {
         e.preventDefault();
         section.classList.add('subproject-section-drag-over');
@@ -1644,16 +1661,32 @@ function renderSubprojectBlocks() {
       }
     });
     section.addEventListener('dragleave', (e) => {
-      // Only remove highlight when leaving the section itself (not entering a child)
       if (!section.contains(e.relatedTarget)) {
         section.classList.remove('subproject-section-drag-over');
+        section.classList.remove('sp-section-drag-over');
       }
     });
     section.addEventListener('drop', async (e) => {
       e.preventDefault();
       section.classList.remove('subproject-section-drag-over');
+      section.classList.remove('sp-section-drag-over');
 
       const dragType = e.dataTransfer.getData('text/drag-type');
+
+      // Subproject section reorder
+      if (dragType === 'subproject-section') {
+        const fromIdx = parseInt(e.dataTransfer.getData('text/sp-section-index'));
+        const toIdx = spIndex;
+        if (isNaN(fromIdx) || fromIdx === toIdx) return;
+        const sps = [...currentProject.subprojects];
+        const [moved] = sps.splice(fromIdx, 1);
+        const adjustedToIdx = toIdx > fromIdx ? toIdx - 1 : toIdx;
+        sps.splice(adjustedToIdx, 0, moved);
+        currentProject.subprojects = sps;
+        await window.electronAPI.updateProject(currentProject.id, { subprojects: currentProject.subprojects });
+        renderSubprojectBlocks();
+        return;
+      }
 
       // Cross-section drag from URL/Folder/File blocks
       if (dragType === 'url' || dragType === 'folder' || dragType === 'file') {

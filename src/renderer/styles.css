@@ -1498,6 +1498,28 @@ textarea.form-input {
 }
 
 /* Subproject drop zone for adding items */
+/* Subproject section drag reorder */
+.sp-section-drag-handle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  flex-shrink: 0;
+  color: var(--text-muted);
+  cursor: grab;
+  opacity: 0.3;
+  transition: opacity var(--transition);
+}
+.sp-section-drag-handle:active { cursor: grabbing; }
+.subproject-header:hover .sp-section-drag-handle { opacity: 0.8; }
+.subproject-header[draggable="true"] { cursor: grab; }
+.subproject-header[draggable="true"]:active { cursor: grabbing; }
+.subproject-section-dragging { opacity: 0.4; }
+.sp-section-drag-over {
+  border-top: 2px solid var(--accent);
+  margin-top: -2px;
+}
+
 .subproject-section-drag-over {
   border-color: var(--accent);
   background: rgba(59, 130, 246, 0.08);
