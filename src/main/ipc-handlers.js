@@ -3,6 +3,7 @@ const { spawn } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 const { getLogger } = require('./logger');
+const { getUserShellInfo } = require('./shell-utils');
 
 // Shell 特殊字符转义（防注入）
 function escapeShellArg(str) {
@@ -83,17 +84,6 @@ function normalizeCommandPath(command, projectPath, mode = 'terminal') {
     }
   }
   return command;
-}
-
-// 获取用户的 shell 路径和对应的 RC 文件
-function getUserShellInfo() {
-  const shell = process.env.SHELL || '/bin/zsh';
-  const home = process.env.HOME || '';
-  let rcFile = '';
-  if (shell.endsWith('/zsh')) rcFile = `${home}/.zshrc`;
-  else if (shell.endsWith('/bash')) rcFile = `${home}/.bashrc`;
-  else if (shell.endsWith('/fish')) rcFile = `${home}/.config/fish/config.fish`;
-  return { shell, rcFile };
 }
 
 // 版本号比较：返回 1(a>b), -1(a<b), 0(a==b)
@@ -512,7 +502,6 @@ end tell`;
   ipcMain.handle('open-file', async () => {
     const win = BrowserWindow.getFocusedWindow();
     const lastPath = store.getSetting('lastImportPath');
-    const path = require('path');
 
     // 如果有上次的路径，使用其目录作为默认目录
     const defaultPath = lastPath ? path.dirname(lastPath) : undefined;
@@ -546,7 +535,6 @@ end tell`;
 
   // --- Get Last Import/Export Directory ---
   ipcMain.handle('get-last-import-export-dir', () => {
-    const path = require('path');
     const lastImportPath = store.getSetting('lastImportPath');
     const lastExportPath = store.getSetting('lastExportPath');
 

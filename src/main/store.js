@@ -178,6 +178,13 @@ class ProjectStore {
     projects.unshift(project);
     this._normalizeProjectUrls(project);
     this._saveProjects(projects);
+    getLogger().info({
+      event: 'job_succeeded',
+      status: 'success',
+      action: 'add_project',
+      project_id: project.id,
+      project_name: name,
+    }, 'Project added');
     return project;
   }
 
@@ -228,6 +235,13 @@ class ProjectStore {
     projects[idx] = project;
     this._normalizeProjectUrls(project);
     this._saveProjects(projects);
+    getLogger().info({
+      event: 'job_succeeded',
+      status: 'success',
+      action: 'update_project',
+      project_id: id,
+      project_name: project.name,
+    }, 'Project updated');
     return project;
   }
 
@@ -245,6 +259,12 @@ class ProjectStore {
     const filtered = projects.filter((p) => p.id !== id);
     if (filtered.length === projects.length) return false;
     this._saveProjects(filtered);
+    getLogger().info({
+      event: 'job_succeeded',
+      status: 'success',
+      action: 'delete_project',
+      project_id: id,
+    }, 'Project deleted');
     return true;
   }
 
@@ -353,6 +373,14 @@ class ProjectStore {
       this._saveSchedules(existingSchedules);
     }
 
+    getLogger().info({
+      event: 'job_succeeded',
+      status: 'success',
+      action: 'import_data',
+      added,
+      updated,
+      deleted,
+    }, 'Data imported');
     return { added, updated, deleted };
   }
 

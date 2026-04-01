@@ -1,4 +1,4 @@
-const { app, BrowserWindow, nativeImage, globalShortcut } = require('electron');
+const { app, BrowserWindow, nativeImage, globalShortcut, dialog } = require('electron');
 const path = require('path');
 const ProjectStore = require('./store');
 const Scheduler = require('./scheduler');
@@ -59,10 +59,16 @@ function activateMainWindow() {
   mainWindow.focus();
 }
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
   // 初始化数据层（需要 userDataPath，先于 logger 初始化）
   const userDataPath = app.getPath('userData');
-  store = new ProjectStore(userDataPath);
+  try {
+    store = new ProjectStore(userDataPath);
+  } catch (e) {
+    dialog.showErrorBox('Initialization Failed — Store', e.stack || e.message);
+    app.quit();
+    return;
+  }
 
   // 初始化结构化日志（日志文件写入 userData/logs/）
   initLogger(userDataPath);
@@ -92,8 +98,13 @@ app.whenReady().then(() => {
   }, 'Application started');
 
   // 初始化调度引擎
-  scheduler = new Scheduler(store, () => mainWindow);
-  scheduler.init();
+  try {
+    scheduler = new Scheduler(store, () => mainWindow);
+    scheduler.init();
+  } catch (e) {
+    log.error({ event: 'error_occurred', status: 'failed', error: e.message }, 'Scheduler init failed');
+    dialog.showErrorBox('Initialization Failed — Scheduler', e.stack || e.message);
+  }
 
   // 注册 IPC 处理
   registerIpcHandlers(store, null, () => mainWindow, scheduler);

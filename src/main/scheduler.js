@@ -4,6 +4,7 @@ const { Notification, app } = require('electron');
 const fs = require('fs');
 const { v4: uuidv4 } = require('uuid');
 const { getLogger, withTrace } = require('./logger');
+const { getUserShellInfo } = require('./shell-utils');
 
 const MAX_STDOUT = 10 * 1024; // 10KB
 
@@ -150,12 +151,7 @@ class Scheduler {
       : app.getPath('desktop');
 
     // 使用用户默认 shell 并加载 RC 文件以获取完整 PATH（与静默执行一致）
-    const userShell = process.env.SHELL || '/bin/zsh';
-    const home = process.env.HOME || '';
-    let rcFile = '';
-    if (userShell.endsWith('/zsh')) rcFile = `${home}/.zshrc`;
-    else if (userShell.endsWith('/bash')) rcFile = `${home}/.bashrc`;
-    else if (userShell.endsWith('/fish')) rcFile = `${home}/.config/fish/config.fish`;
+    const { shell: userShell, rcFile } = getUserShellInfo();
 
     const escapedWorkDir = workDir.replace(/'/g, "'\\''");
     const sourceCmd = rcFile ? `[ -f "${rcFile}" ] && . "${rcFile}" 2>/dev/null; ` : '';
